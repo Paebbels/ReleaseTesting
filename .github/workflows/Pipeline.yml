@@ -1,0 +1,47 @@
+name: Pipeline
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  Build:
+    name: Build something
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: 🖉 Dummy
+        run: echo "Document 1" > document1.txt
+
+      - name: 📤 Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: document
+          path: document1.txt
+          if-no-files-found: error
+          retention-days: 1
+
+  NightlyPage:
+    uses: ./.github/workflows/Nightly.yml
+    needs:
+      - Build
+    secrets: inherit
+
+  TriggerTaggedRelease:
+    uses: ./.github/workflows/Tagging.yml
+    needs:
+      - NightlyPage
+    secrets: inherit
+    permissions:
+      contents: write
+      actions: write
+      attestations: write
+    with:
+      label: 'Release'
+
+  ReleasePage:
+    uses: ./.github/workflows/Release.yml
+    if: startsWith(github.ref, 'refs/tags')
+    needs:
+      - Build
+    secrets: inherit

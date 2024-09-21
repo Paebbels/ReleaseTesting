@@ -1,0 +1,94 @@
+# ==================================================================================================================== #
+# Authors:                                                                                                             #
+#   Patrick Lehmann                                                                                                    #
+#   Unai Martinez-Corral                                                                                               #
+#                                                                                                                      #
+# ==================================================================================================================== #
+# Copyright 2020-2024 The pyTooling Authors                                                                            #
+#                                                                                                                      #
+# Licensed under the Apache License, Version 2.0 (the "License");                                                      #
+# you may not use this file except in compliance with the License.                                                     #
+# You may obtain a copy of the License at                                                                              #
+#                                                                                                                      #
+#   http://www.apache.org/licenses/LICENSE-2.0                                                                         #
+#                                                                                                                      #
+# Unless required by applicable law or agreed to in writing, software                                                  #
+# distributed under the License is distributed on an "AS IS" BASIS,                                                    #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.                                             #
+# See the License for the specific language governing permissions and                                                  #
+# limitations under the License.                                                                                       #
+#                                                                                                                      #
+# SPDX-License-Identifier: Apache-2.0                                                                                  #
+# ==================================================================================================================== #
+name: Add Release Tag
+
+on:
+  workflow_call:
+    inputs:
+      ubuntu_image:
+        description: 'Name of the Ubuntu image.'
+        required: false
+        default: 'ubuntu-24.04'
+        type: string
+      release_branch:
+        description: 'Name of the branch containing releases.'
+        required: false
+        default: 'main'
+        type: string
+      development_branch:
+        description: 'Name of the development branch containing features.'
+        required: false
+        default: ''
+        type: string
+      label:
+        description: 'Label the pull request must be marked with.'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  AddTag:
+    name: "🏷 Create 'Release Tag' on GitHub"
+    runs-on: ${{ inputs.ubuntu_image }}
+    if: github.ref == 'refs/heads/${{ inputs.release_branch }}'
+
+    permissions:
+      contents: write
+      actions: write
+      attestations: write
+
+    steps:
+      - name: ⏬ Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # The command 'git describe' (used for version) needs the history.
+          fetch-depth: 0
+
+      - name: 🔁 Extract Git tag from GITHUB_REF
+        id: latestpullrequest
+        run: |
+          export GH_TOKEN=${{ github.token }}
+          
+          RELEASE_VERSION=$(gh pr list --base ${{ inputs.release_branch }} --label Release --state merged --json title --jq '.[0].title')
+          if [[ $? -ne 0 || "{RELEASE_VERSION}" == "" ]]; then
+            echo "Couldn't find a merged Pull Request to '${{ inputs.release_branch }}'."
+            echo "::error title=Pull Request::Couldn't find a merged Pull Request to '${{ inputs.release_branch }}'."
+          
+            echo "Pull Requests to '${{ inputs.release_branch }}':"
+            gh pr list --base ${{ inputs.release_branch }}
+          
+            exit 1
+          fi
+          
+          echo "Version tag: ${RELEASE_VERSION}"
+          echo "version=${RELEASE_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: "🏷 Create release tag '${{ steps.latestpullrequest.outputs.version }}'"
+        id: createReleaseTag
+        if: startsWith(steps.latestpullrequest.outputs.version, 'v')
+        run: |
+            git config --local user.email "ReleaseTagging@users.noreply.github.com"
+            git config --local user.name "Paebbels/Actions: Release Tagging"
+
+            git tag "${{ steps.latestpullrequest.outputs.version }}"
+            git push origin "${{ steps.latestpullrequest.outputs.version }}"
