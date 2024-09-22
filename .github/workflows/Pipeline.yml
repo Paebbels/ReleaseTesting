@@ -10,14 +10,34 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - name: 🖉 Dummy
-        run: echo "Document 1" > document1.txt
+      - name: 🖉 Build 1
+        run: |
+          echo "Document 1 $(date --utc '+%d.%m.%Y - %H:%M:%S')"   > document1.txt
+          echo "Analysis log $(date --utc '+%d.%m.%Y - %H:%M:%S')" > analysis.log
+          echo "Build log $(date --utc '+%d.%m.%Y - %H:%M:%S')"    > build.log
 
       - name: 📤 Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: document
-          path: document1.txt
+          path: |
+            document1.txt
+            *.log
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: 🖉 Program
+        run: |
+          echo "Document other $(date --utc '+%d.%m.%Y - %H:%M:%S')" > document1.txt
+          echo "Program $(date --utc '+%d.%m.%Y - %H:%M:%S')"        > program.py
+          
+      - name: 📤 Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: other
+          path: |
+            *.txt
+            *.py
           if-no-files-found: error
           retention-days: 1
 
@@ -26,6 +46,16 @@ jobs:
     needs:
       - Build
     secrets: inherit
+    permissions:
+      contents: write
+      actions: write
+      attestations: write
+    with:
+      assets: |
+        document:document1.txt:Documentation
+        document:build.log:Logfile
+        other:document1.txt:SBOM
+        other:program.py:Application
 
   TriggerTaggedRelease:
     uses: ./.github/workflows/Tagging.yml
@@ -35,7 +65,7 @@ jobs:
     permissions:
       contents: write
       actions: write
-      attestations: write
+#      attestations: write
     with:
       label: 'Release'
 

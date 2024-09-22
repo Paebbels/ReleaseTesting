@@ -30,6 +30,15 @@ on:
         required: false
         default: 'ubuntu-24.04'
         type: string
+      nightly_name:
+        description: 'Name of the nightly release.'
+        required: false
+        default: 'nightly'
+        type: string
+      assets:
+        description: 'Multi-line string containing artifact:file:title asset descriptions.'
+        required: true
+        type: string
       release_branch:
         description: 'Name of the branch containing releases.'
         required: false
@@ -40,6 +49,10 @@ jobs:
   Release:
     name: 📝 Update 'Nightly Page' on GitHub
     runs-on: ${{ inputs.ubuntu_image }}
+    permissions:
+      contents: write
+      actions: write
+      attestations: write
 
     steps:
       - name: ⏬ Checkout repository
@@ -48,14 +61,115 @@ jobs:
           # The command 'git describe' (used for version) needs the history.
           fetch-depth: 0
 
-      - name: 📥 Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: document
-          path: artifacts
+      - name: 📑 Delete (old) Release Page
+        id: deleteReleasePage
+        run: |
+          ANSI_LIGHT_RED="\e[91m"
+          ANSI_LIGHT_GREEN="\e[92m"
+          ANSI_NOCOLOR="\e[0m"
+          
+          export GH_TOKEN=${{ github.token }}
+          
+          echo -n "Deleting release '${{ inputs.nightly_name }}' ... "
+          gh release delete ${{ inputs.nightly_name }} --yes
+          if [[ $? -eq 0 ]]; then
+            echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+          else
+            echo -e "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}"
+            echo "Couldn't delete release '${{ inputs.nightly_name }}'."
+            echo "::error title=APIError::Couldn't delete release '${{ inputs.nightly_name }}'."
+            exit 1
+          fi
 
-      - name: 📑 Create Release Page
+      - name: 📑 (Re)create (new) Release Page
         id: createReleasePage
+        run: |
+          ANSI_LIGHT_RED="\e[91m"
+          ANSI_LIGHT_GREEN="\e[92m"
+          ANSI_NOCOLOR="\e[0m"
+          
+          export GH_TOKEN=${{ github.token }}
+          
+          echo "Creating release '${{ inputs.nightly_name }}' ... "
+          gh release create ${{ inputs.nightly_name }} --verify-tag --notes "Testing $(date '+%H:%M:%S %Y-%m-%d')"
+          if [[ $? -eq 0 ]]; then
+            echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+          else
+            echo -e "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}"
+            echo "Couldn't create release '${{ inputs.nightly_name }}'."
+            echo "::error title=APIError::Couldn't create release '${{ inputs.nightly_name }}'."
+            exit 1
+          fi
+
+          # --notes-file <file>
+          # --notes-from-tag
+
+      - name: 📥 Download artifacts and upload as assets
+        id: uploadAssets
+        run: |
+          ANSI_LIGHT_RED="\e[91m"
+          ANSI_LIGHT_GREEN="\e[92m"
+          ANSI_LIGHT_YELLOW="\e[93m"
+          ANSI_NOCOLOR="\e[0m"
+          
+          export GH_TOKEN=${{ github.token }}
+          
+          declare -A downloadedArtifacts
+          while IFS=$'\r\n' read -r AssetLine; do
+            if [[ "${AssetLine}" == "" ]]; then
+              continue
+            fi
+          
+            artifact="${AssetLine%%:*}"
+            remaining="${AssetLine#*:}"
+            asset="${remaining%%:*}"
+            title="${remaining##*:}"
+          
+            echo "Publish asset '${asset}' from artifact '${artifact}' with title '${title}'"
+            if [[ -n "${downloadedArtifacts[$artifact]}" ]]; then
+              echo    "  downloading '${artifact}' ... ${ANSI_LIGHT_YELLOW}[SKIPPED]${ANSI_NOCOLOR}"
+            else
+              echo    "  downloading '${artifact}' ... "
+              echo -n "    gh run download $GITHUB_RUN_ID --dir \"${artifact}\" --name \"${artifact}\" "
+              gh run download $GITHUB_RUN_ID --dir "${artifact}" --name "${artifact}"
+              if [[ $? -eq 0 ]]; then
+                echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+              else
+                echo -e "${ANSI_LIGHT_RED}[ERROR]${ANSI_NOCOLOR}"
+                echo "Couldn't download artifact '${artifact}'."
+                echo "::error title=ArtifactNotFound::Couldn't download artifact '${artifact}'."
+                continue
+              fi
+              downloadedArtifacts[$artifact]=1
+            fi
+          
+            echo -n "  checking asset '${artifact}/${asset}' ... "
+            if [[ -e "${artifact}/${asset}" ]]; then
+              echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+            else
+              echo -e "${ANSI_LIGHT_RED}[ERROR]${ANSI_NOCOLOR}"
+              echo "Couldn't find asset '${asset}' in artifact '${artifact}'."
+              echo "::error title=FileNotFound::Couldn't find asset '${asset}' in artifact '${artifact}'."
+              continue
+            fi
+        
+            echo -n "  uploading asset '${asset}' with title '${title}' ... "
+            gh release upload ${{ inputs.nightly_name }} "${artifact}/${asset}#${title}" --clobber
+            if [[ $? -eq 0 ]]; then
+              echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+            else
+              echo -e "${ANSI_LIGHT_RED}[ERROR]${ANSI_NOCOLOR}"
+              echo "Couldn't upload asset '${asset}' to release '${{ inputs.nightly_name }}'."
+              echo "::error title=UploadError::Couldn't upload asset '${asset}' to release '${{ inputs.nightly_name }}'."
+              continue
+            fi
+          done <<<"${{ inputs.assets }}"
+          
+          echo "Inspecting downlaoded artifacts ..."
+          tree .
+          
+      - name: 📑 Create Release Page
+        id: testing
         run: |
           export GH_TOKEN=${{ github.token }}
           
