@@ -30,6 +30,15 @@ on:
         required: false
         default: 'ubuntu-24.04'
         type: string
+      nightly_name:
+        description: 'Name of the nightly release.'
+        required: false
+        default: 'nightly'
+        type: string
+      assets:
+        description: 'Multi-line string containing artifact:file:title asset descriptions.'
+        required: true
+        type: string
       release_branch:
         description: 'Name of the branch containing releases.'
         required: false
@@ -40,6 +49,10 @@ jobs:
   Release:
     name: 📝 Update 'Nightly Page' on GitHub
     runs-on: ${{ inputs.ubuntu_image }}
+    permissions:
+      contents: write
+      actions: write
+      attestations: write
 
     steps:
       - name: ⏬ Checkout repository
@@ -49,10 +62,49 @@ jobs:
           fetch-depth: 0
 
       - name: 📥 Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: document
-          path: artifacts
+        run: |
+          export GH_TOKEN=${{ github.token }}
+          
+          declare -A downloadedArtifacts
+          while IFS=$'\r\n' read -r AssetLine; do
+            if [[ "${AssetLine}" == "" ]]; then
+              continue
+            fi
+          
+            artifact="${AssetLine%%:*}"
+            remaining="${AssetLine#*:}"
+            asset="${remaining%%:*}"
+            title="${remaining##*:}"
+          
+            echo "Asset '${asset}' from '${artifact}' as '${title}'"
+            if [[ -n "${downloadedArtifacts[$artifact]}" ]]; then
+              echo "  skipping ${artifact}"
+              continue
+            fi
+          
+            echo "  downloading ${artifact}"
+            echo "    gh run download $GITHUB_RUN_ID --dir \"${artifact}\" --name \"${artifact}\""
+            gh run download $GITHUB_RUN_ID --dir "${artifact}" --name "${artifact}"
+            if [[ $? -ne 0 ]]; then
+              echo "Couldn't download artifact '${artifact}'."
+              echo "::error title=ArtifactNotFound::Couldn't download artifact '${artifact}'."
+              continue
+            fi
+        
+            downloadedArtifacts[$artifact]=1
+          done <<<"${{ inputs.assets }}"
+          
+          ls -l ${artifact}
+          ls -l ${artifact}/${asset}
+          
+          if [[ ! -e "${artifact}/${asset}" ]]; then
+            echo "Couldn't asset '${asset}' in artifact '${artifact}'."
+            echo "::error title=FileNotFound::Couldn't asset '${asset}' in artifact '${artifact}'."
+            continue
+          fi
+          
+          echo "gh release create ${{ inputs.nightly_name }} --verify-tag \"${artifact}/${asset}#${title}\""
+          gh release create ${{ inputs.nightly_name }} --verify-tag "${artifact}/${asset}#${title}"
 
       - name: 📑 Create Release Page
         id: createReleasePage

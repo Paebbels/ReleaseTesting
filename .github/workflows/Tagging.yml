@@ -55,7 +55,7 @@ jobs:
     permissions:
       contents: write
       actions: write
-      attestations: write
+#      attestations: write
 
     steps:
       - name: ⏬ Checkout repository
