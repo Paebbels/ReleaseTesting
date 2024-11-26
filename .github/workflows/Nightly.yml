@@ -115,6 +115,7 @@ jobs:
           export GH_TOKEN=${{ github.token }}
           
           declare -A downloadedArtifacts
+          declare -A assetFilenames
           while IFS=$'\r\n' read -r AssetLine; do
             if [[ "${AssetLine}" == "" ]]; then
               continue
@@ -126,8 +127,18 @@ jobs:
             title="${remaining##*:}"
           
             echo "Publish asset '${asset}' from artifact '${artifact}' with title '${title}'"
+            echo -n "  Checked asset for duplicates ... "
+            if [[ -n "${assetFilenames[$asset]}" ]]; then
+              echo -e "${ANSI_LIGHT_RED}[ERROR]${ANSI_NOCOLOR}"
+              echo "::error title=DuplicateAsset::Asset '${asset}' was already uploaded to release '${{ inputs.nightly_name }}'."
+              continue
+            else
+              echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+              assetFilenames[$asset]=1
+            fi
+          
             if [[ -n "${downloadedArtifacts[$artifact]}" ]]; then
-              echo    "  downloading '${artifact}' ... ${ANSI_LIGHT_YELLOW}[SKIPPED]${ANSI_NOCOLOR}"
+              echo -e "  downloading '${artifact}' ... ${ANSI_LIGHT_YELLOW}[SKIPPED]${ANSI_NOCOLOR}"
             else
               echo    "  downloading '${artifact}' ... "
               echo -n "    gh run download $GITHUB_RUN_ID --dir \"${artifact}\" --name \"${artifact}\" "
