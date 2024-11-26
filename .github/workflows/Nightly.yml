@@ -133,18 +133,23 @@ jobs:
           fi
           
           if [[ "${{ inputs.nightly_title }}" != "" ]]; then
-            addTitle="--title '${{ inputs.nightly_title }}'"
+            addTitle=("--title" "${{ inputs.nightly_title }}")
           fi
           
           cat <<'EOF' > __NoTeS__.md 
           ${{ inputs.nightly_description }}
           EOF
+          echo "----------"
+          ls -lAh .
+          echo "----------"
+          cat __NoTeS__.md
+          echo "----------"
           if [[ -s __NoTeS__.md ]]; then
-            addNotes="--notes-file -"
+            addNotes=("--notes-file" "__NoTeS__.md")
           fi
           
           echo "Creating release '${{ inputs.nightly_name }}' ... "
-          gh release create ${{ inputs.nightly_name }} --verify-tag $addDraft $addPreRelease $addLatest $addTitle $addNotes
+          gh release create "${{ inputs.nightly_name }}" --verify-tag $addDraft $addPreRelease $addLatest "${addTitle[@]}" "${addNotes[@]}"
           if [[ $? -eq 0 ]]; then
             echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
           else
@@ -164,6 +169,7 @@ jobs:
           
           export GH_TOKEN=${{ github.token }}
           
+          ERRORS=0
           declare -A downloadedArtifacts
           declare -A assetFilenames
           while IFS=$'\r\n' read -r AssetLine; do
@@ -181,6 +187,7 @@ jobs:
             if [[ -n "${assetFilenames[$asset]}" ]]; then
               echo -e "${ANSI_LIGHT_RED}[ERROR]${ANSI_NOCOLOR}"
               echo "::error title=DuplicateAsset::Asset '${asset}' from artifact '${artifact}' was already uploaded to release '${{ inputs.nightly_name }}'."
+              ERRORS=1
               continue
             else
               echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
@@ -199,6 +206,7 @@ jobs:
                 echo -e "${ANSI_LIGHT_RED}[ERROR]${ANSI_NOCOLOR}"
                 echo "Couldn't download artifact '${artifact}'."
                 echo "::error title=ArtifactNotFound::Couldn't download artifact '${artifact}'."
+                ERRORS=1
                 continue
               fi
               downloadedArtifacts[$artifact]=1
@@ -211,6 +219,7 @@ jobs:
               echo -e "${ANSI_LIGHT_RED}[ERROR]${ANSI_NOCOLOR}"
               echo "Couldn't find asset '${asset}' in artifact '${artifact}'."
               echo "::error title=FileNotFound::Couldn't find asset '${asset}' in artifact '${artifact}'."
+              ERRORS=1
               continue
             fi
         
@@ -222,12 +231,17 @@ jobs:
               echo -e "${ANSI_LIGHT_RED}[ERROR]${ANSI_NOCOLOR}"
               echo "Couldn't upload asset '${asset}' to release '${{ inputs.nightly_name }}'."
               echo "::error title=UploadError::Couldn't upload asset '${asset}' to release '${{ inputs.nightly_name }}'."
+              ERRORS=1
               continue
             fi
           done <<<"${{ inputs.assets }}"
           
           echo "Inspecting downlaoded artifacts ..."
           tree .
+          
+          if [[ $ERROR -ne 0 ]]; then
+            exit 1
+          fi
           
       - name: 📑 Create Release Page
         id: testing
