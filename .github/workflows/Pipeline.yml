@@ -51,6 +51,16 @@ jobs:
       actions: write
       attestations: write
     with:
+      prerelease: true
+      nightly_title: "Eggs"
+#      nightly_title: "Nächtliches Release"
+      nightly_description: foo bar
+#      nightly_description: |
+#        Da hat mal wieder\
+#        einer etwas\
+#        hochgeladen.\
+#
+#        [link](ins/nirgend/wo)
       assets: |
         document:document1.txt:Documentation
         document:build.log:Logfile
