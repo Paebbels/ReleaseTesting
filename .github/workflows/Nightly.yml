@@ -114,6 +114,8 @@ jobs:
       - name: 📑 (Re)create (new) Release Page
         id: createReleasePage
         run: |
+          set +e
+
           ANSI_LIGHT_RED="\e[91m"
           ANSI_LIGHT_GREEN="\e[92m"
           ANSI_NOCOLOR="\e[0m"
@@ -162,6 +164,8 @@ jobs:
       - name: 📥 Download artifacts and upload as assets
         id: uploadAssets
         run: |
+          set +e
+
           ANSI_LIGHT_RED="\e[91m"
           ANSI_LIGHT_GREEN="\e[92m"
           ANSI_LIGHT_YELLOW="\e[93m"
@@ -170,17 +174,24 @@ jobs:
           export GH_TOKEN=${{ github.token }}
 
           ERRORS=0
+          # A dictionary of 0/1 to avoid duplicate downloads
           declare -A downloadedArtifacts
+          # A dictionary to check for duplicate asset files in release
           declare -A assetFilenames
-          while IFS=$'\r\n' read -r AssetLine; do
-            if [[ "${AssetLine}" == "" ]]; then
+          while IFS=$'\r\n' read -r assetLine; do
+            if [[ "${assetLine}" == "" ]]; then
               continue
             fi
 
-            artifact="${AssetLine%%:*}"
-            remaining="${AssetLine#*:}"
+            # split assetLine colon separated triple: artifact:asset:title
+            artifact="${assetLine%%:*}"
+            remaining="${assetLine#*:}"
             asset="${remaining%%:*}"
             title="${remaining##*:}"
+
+            # remove leading whitespace
+            asset="${asset#"${asset%%[![:space:]]*}"}"
+            title="${title#"${title%%[![:space:]]*}"}"
 
             echo "Publish asset '${asset}' from artifact '${artifact}' with title '${title}'"
             echo -n "  Checked asset for duplicates ... "
@@ -194,6 +205,7 @@ jobs:
               assetFilenames[$asset]=1
             fi
 
+            # Download artifact by artifact name
             if [[ -n "${downloadedArtifacts[$artifact]}" ]]; then
               echo -e "  downloading '${artifact}' ... ${ANSI_LIGHT_YELLOW}[SKIPPED]${ANSI_NOCOLOR}"
             else
@@ -212,13 +224,14 @@ jobs:
               downloadedArtifacts[$artifact]=1
             fi
 
+            # Check if artifact should be compressed (zip, tgz) or if asset was part of the downloaded artifact.
             echo -n "  checking asset '${artifact}/${asset}' ... "
             if [[ "${asset}" == !*zip ]]; then
               echo -e "${ANSI_LIGHT_GREEN}[ZIP]${ANSI_NOCOLOR}"
               asset="${asset##*!}"
               echo "    Compressing artifact '${artifact}' to '${asset}' ..."
               cd "${artifact}"
-              zip -v -r "../${asset}" *
+              zip -r "../${asset}" *
               cd -
               if [[ $? -eq 0 ]]; then
                 echo -e "    Compression ${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
@@ -227,6 +240,23 @@ jobs:
                 echo -e "    Compression ${ANSI_LIGHT_RED}[ERROR]${ANSI_NOCOLOR}"
                 echo "Couldn't compress '${artifact}' to zip file '${asset}'."
                 echo "::error title=ZipError::Couldn't compress '${artifact}' to zip file '${asset}'."
+                ERRORS=1
+                continue
+              fi
+            elif [[ "${asset}" == !*tgz ]]; then
+              echo -e "${ANSI_LIGHT_GREEN}[TAR/GZ]${ANSI_NOCOLOR}"
+              asset="${asset##*!}"
+              echo "    Compressing artifact '${artifact}' to '${asset}' ..."
+              cd "${artifact}"
+              tar -czf "../${asset}" *
+              cd -
+              if [[ $? -eq 0 ]]; then
+                echo -e "    Compression ${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+                uploadFile="${asset}"
+              else
+                echo -e "    Compression ${ANSI_LIGHT_RED}[ERROR]${ANSI_NOCOLOR}"
+                echo "Couldn't compress '${artifact}' to tgz file '${asset}'."
+                echo "::error title=ZipError::Couldn't compress '${artifact}' to tgz file '${asset}'."
                 ERRORS=1
                 continue
               fi
@@ -241,6 +271,7 @@ jobs:
               continue
             fi
 
+            # Upload asset to existing release page
             echo -n "  uploading asset '${asset}' from '${uploadFile}' with title '${title}' ... "
             gh release upload ${{ inputs.nightly_name }} "${uploadFile}#${title}" --clobber
             if [[ $? -eq 0 ]]; then
@@ -254,14 +285,14 @@ jobs:
             fi
           done <<<"${{ inputs.assets }}"
 
-          echo "Inspecting downlaoded artifacts ..."
-          tree .
+          echo "Inspecting downloaded artifacts ..."
+          tree -L 3 .
 
           if [[ $ERROR -ne 0 ]]; then
             echo -e "${ANSI_LIGHT_RED}Errors detected in previous steps.${ANSI_NOCOLOR}"
             exit 1
           fi
-          
+
       - name: 📑 Create Release Page
         id: testing
         run: |

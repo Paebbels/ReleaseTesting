@@ -52,8 +52,7 @@ jobs:
       attestations: write
     with:
       prerelease: true
-#      nightly_title: "Nächtliches Release"
-      nightly_title: "Nightly Release"
+      nightly_title: "Nächtliches Release"
       nightly_description: |
         Da hat mal wieder\
         einer etwas\
@@ -61,11 +60,12 @@ jobs:
 
         [link](ins/nirgend/wo)
       assets: |
-        document:document1.txt:Documentation
-        document:build.log:Logfile
-        other:document1.txt:SBOM
-        other:program.py:Application
+        document: document1.txt: Documentation
+        document: build.log:     Logfile
+        other:    document1.txt: SBOM
+        other:    program.py:    Application
         document:!all-in-one.zip:Some stuff to read
+        other:   !nothing.tgz:   Nothing to relevant
 
   TriggerTaggedRelease:
     uses: ./.github/workflows/Tagging.yml
