@@ -57,7 +57,7 @@ jobs:
       nightly_description: |
         Da hat mal wieder\
         einer etwas\
-        hochgeladen.\
+        hochgeladen.
 
         [link](ins/nirgend/wo)
       assets: |
@@ -65,6 +65,7 @@ jobs:
         document:build.log:Logfile
         other:document1.txt:SBOM
         other:program.py:Application
+        document:!all-in-one.zip:Some stuff to read
 
   TriggerTaggedRelease:
     uses: ./.github/workflows/Tagging.yml

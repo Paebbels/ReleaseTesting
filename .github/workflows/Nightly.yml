@@ -90,20 +90,20 @@ jobs:
         id: deleteReleasePage
         run: |
           set +e
-          
+
           ANSI_LIGHT_RED="\e[91m"
           ANSI_LIGHT_GREEN="\e[92m"
           ANSI_LIGHT_YELLOW="\e[93m"
           ANSI_NOCOLOR="\e[0m"
-          
+
           export GH_TOKEN=${{ github.token }}
-          
+
           echo -n "Deleting release '${{ inputs.nightly_name }}' ... "
           message="$(gh release delete ${{ inputs.nightly_name }} --yes 2>&1)"
           if [[ $? -eq 0 ]]; then
             echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
           elif [[ "${message}" == "release not found" ]]; then
-            echo -e "${ANSI_LIGHT_YELLOW}[NOT FOUND]${ANSI_NOCOLOR}"        
+            echo -e "${ANSI_LIGHT_YELLOW}[NOT FOUND]${ANSI_NOCOLOR}"
           else
             echo -e "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}"
             echo "Couldn't delete release '${{ inputs.nightly_name }}' -> Error: '${message}'."
@@ -117,37 +117,37 @@ jobs:
           ANSI_LIGHT_RED="\e[91m"
           ANSI_LIGHT_GREEN="\e[92m"
           ANSI_NOCOLOR="\e[0m"
-          
+
           export GH_TOKEN=${{ github.token }}
-          
+
           if ${{ inputs.draft }}; then
             addDraft="--draft"
           fi
-          
+
           if ${{ inputs.prerelease }}; then
             addPreRelease="--prerelease"
           fi
-          
+
           if ! ${{ inputs.latest }}; then
             addLatest="--latest=false"
           fi
-          
+
           if [[ "${{ inputs.nightly_title }}" != "" ]]; then
             addTitle=("--title" "${{ inputs.nightly_title }}")
           fi
-          
-          cat <<'EOF' > __NoTeS__.md 
+
+          cat <<'EOF' > __NoTeS__.md
           ${{ inputs.nightly_description }}
           EOF
-          echo "----------"
-          ls -lAh .
-          echo "----------"
-          cat __NoTeS__.md
-          echo "----------"
           if [[ -s __NoTeS__.md ]]; then
             addNotes=("--notes-file" "__NoTeS__.md")
           fi
-          
+          cat <<EOF >> __NoTeS__.md
+
+          --------
+          Published from [${{ github.workflow }}](https://github.com/Paebbels/ghdl/actions/runs/${{ github.run_id }}) workflow triggered by @${{ github.actor }} on $(date '+%Y-%m-%d %H:%M:%S').
+          EOF
+
           echo "Creating release '${{ inputs.nightly_name }}' ... "
           gh release create "${{ inputs.nightly_name }}" --verify-tag $addDraft $addPreRelease $addLatest "${addTitle[@]}" "${addNotes[@]}"
           if [[ $? -eq 0 ]]; then
@@ -166,9 +166,9 @@ jobs:
           ANSI_LIGHT_GREEN="\e[92m"
           ANSI_LIGHT_YELLOW="\e[93m"
           ANSI_NOCOLOR="\e[0m"
-          
+
           export GH_TOKEN=${{ github.token }}
-          
+
           ERRORS=0
           declare -A downloadedArtifacts
           declare -A assetFilenames
@@ -176,12 +176,12 @@ jobs:
             if [[ "${AssetLine}" == "" ]]; then
               continue
             fi
-          
+
             artifact="${AssetLine%%:*}"
             remaining="${AssetLine#*:}"
             asset="${remaining%%:*}"
             title="${remaining##*:}"
-          
+
             echo "Publish asset '${asset}' from artifact '${artifact}' with title '${title}'"
             echo -n "  Checked asset for duplicates ... "
             if [[ -n "${assetFilenames[$asset]}" ]]; then
@@ -193,7 +193,7 @@ jobs:
               echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
               assetFilenames[$asset]=1
             fi
-          
+
             if [[ -n "${downloadedArtifacts[$artifact]}" ]]; then
               echo -e "  downloading '${artifact}' ... ${ANSI_LIGHT_YELLOW}[SKIPPED]${ANSI_NOCOLOR}"
             else
@@ -211,10 +211,28 @@ jobs:
               fi
               downloadedArtifacts[$artifact]=1
             fi
-          
+
             echo -n "  checking asset '${artifact}/${asset}' ... "
-            if [[ -e "${artifact}/${asset}" ]]; then
+            if [[ "${asset}" == !*zip ]]; then
+              echo -e "${ANSI_LIGHT_GREEN}[ZIP]${ANSI_NOCOLOR}"
+              asset="${asset##*!}"
+              echo "    Compressing artifact '${artifact}' to '${asset}' ..."
+              cd "${artifact}"
+              zip -v -r "../${asset}" *
+              cd -
+              if [[ $? -eq 0 ]]; then
+                echo -e "    Compression ${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+                uploadFile="${asset}"
+              else
+                echo -e "    Compression ${ANSI_LIGHT_RED}[ERROR]${ANSI_NOCOLOR}"
+                echo "Couldn't compress '${artifact}' to zip file '${asset}'."
+                echo "::error title=ZipError::Couldn't compress '${artifact}' to zip file '${asset}'."
+                ERRORS=1
+                continue
+              fi
+            elif [[ -e "${artifact}/${asset}" ]]; then
               echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+              uploadFile="${artifact}/${asset}"
             else
               echo -e "${ANSI_LIGHT_RED}[ERROR]${ANSI_NOCOLOR}"
               echo "Couldn't find asset '${asset}' in artifact '${artifact}'."
@@ -222,24 +240,25 @@ jobs:
               ERRORS=1
               continue
             fi
-        
-            echo -n "  uploading asset '${asset}' with title '${title}' ... "
-            gh release upload ${{ inputs.nightly_name }} "${artifact}/${asset}#${title}" --clobber
+
+            echo -n "  uploading asset '${asset}' from '${uploadFile}' with title '${title}' ... "
+            gh release upload ${{ inputs.nightly_name }} "${uploadFile}#${title}" --clobber
             if [[ $? -eq 0 ]]; then
               echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
             else
               echo -e "${ANSI_LIGHT_RED}[ERROR]${ANSI_NOCOLOR}"
-              echo "Couldn't upload asset '${asset}' to release '${{ inputs.nightly_name }}'."
-              echo "::error title=UploadError::Couldn't upload asset '${asset}' to release '${{ inputs.nightly_name }}'."
+              echo "Couldn't upload asset '${asset}' from '${uploadFile}' to release '${{ inputs.nightly_name }}'."
+              echo "::error title=UploadError::Couldn't upload asset '${asset}' from '${uploadFile}' to release '${{ inputs.nightly_name }}'."
               ERRORS=1
               continue
             fi
           done <<<"${{ inputs.assets }}"
-          
+
           echo "Inspecting downlaoded artifacts ..."
           tree .
-          
+
           if [[ $ERROR -ne 0 ]]; then
+            echo -e "${ANSI_LIGHT_RED}Errors detected in previous steps.${ANSI_NOCOLOR}"
             exit 1
           fi
           
