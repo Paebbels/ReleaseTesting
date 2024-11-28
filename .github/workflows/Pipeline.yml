@@ -82,12 +82,15 @@ jobs:
         * Platform specific Python wheel package for Ubuntu incl. `pyGHDL...so`
         * Platform specific Python wheel package for Windows incl. `pyGHDL...dll`
       assets: |
-        document: document1.txt: Documentation
-        document: build.log:     Logfile
-        other:    document1.txt: SBOM
-        other:    program.py:    Application
-        document:!all-in-one.zip:Some stuff to read
-        other:   !nothing.tgz:   Nothing to relevant
+        document: document1.txt:  Documentation
+        document: build.log:      Logfile
+        other:    document1.txt:  SBOM
+        other:    program.py:     Application
+        document:!archiv1.zip:    Archiv 1 - zip
+        document:!archiv2.tgz:    Archiv 2 - tgz
+        document:!archiv3.tar.gz: Archiv 3 - tar.gz
+        document:!archiv4.tzst:   Archiv 4 - tzst
+        document:!archiv5.tar.zst:Archiv 5 - tar.zst
 
   TriggerTaggedRelease:
     uses: ./.github/workflows/Tagging.yml
