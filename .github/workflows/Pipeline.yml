@@ -86,11 +86,15 @@ jobs:
         document: build.log:      Logfile
         other:    document1.txt:  SBOM
         other:    program.py:     Application
-        document:!archiv1.zip:    Archiv 1 - zip
-        document:!archiv2.tgz:    Archiv 2 - tgz
-        document:!archiv3.tar.gz: Archiv 3 - tar.gz
-        document:!archiv4.tzst:   Archiv 4 - tzst
-        document:!archiv5.tar.zst:Archiv 5 - tar.zst
+        document:!archive1.zip:    Archive 1 - zip
+        document:!archive2.tgz:    Archive 2 - tgz
+        document:!archive3.tar.gz: Archive 3 - tar.gz
+        document:!archive4.tzst:   Archive 4 - tzst
+        document:!archive5.tar.zst:Archive 5 - tar.zst
+        document:$archive6.tgz:    Archive 6 - tgz + dir
+        document:$archive7.tar.gz: Archive 7 - tar.gz + dir
+        document:$archive8.tzst:   Archive 8 - tzst + dir
+        document:$archive9.tar.zst:Archive 9 - tar.zst + dir
 
   TriggerTaggedRelease:
     uses: ./.github/workflows/Tagging.yml
