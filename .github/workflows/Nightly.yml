@@ -337,18 +337,3 @@ jobs:
             echo -e "${ANSI_LIGHT_RED}Errors detected in previous steps.${ANSI_NOCOLOR}"
             exit 1
           fi
-
-      - name: 📑 Create Release Page
-        id: testing
-        run: |
-          export GH_TOKEN=${{ github.token }}
-          
-          echo "github.ref=${{ github.ref }}"
-          
-          gh pr list --base ${{ inputs.release_branch }} --label Release --state merged --json title
-          echo "return code: $?"
-
-          gh pr list --base ${{ inputs.release_branch }} --label Release --state merged --json title --jq '.[0].title'
-          echo "return code: $?"
-
-          version=$(gh pr list --base ${{ inputs.release_branch }} --label Release --state merged --json title --jq '.[0].title')
