@@ -55,7 +55,7 @@ jobs:
     permissions:
       contents: write
       actions: write
-      attestations: write
+#      attestations: write
 
     steps:
       - name: ⏬ Checkout repository
@@ -63,6 +63,21 @@ jobs:
         with:
           # The command 'git describe' (used for version) needs the history.
           fetch-depth: 0
+
+      - name: 📑 Create Release Page
+        id: testing
+        run: |
+          export GH_TOKEN=${{ github.token }}
+          
+          echo "github.ref=${{ github.ref }}"
+          
+          gh pr list --base ${{ inputs.release_branch }} --label Release --state merged --json title
+          echo "return code: $?"
+
+          gh pr list --base ${{ inputs.release_branch }} --label Release --state merged --json title --jq '.[0].title'
+          echo "return code: $?"
+
+          version=$(gh pr list --base ${{ inputs.release_branch }} --label Release --state merged --json title --jq '.[0].title')
 
       - name: 🔁 Extract Git tag from GITHUB_REF
         id: latestpullrequest
