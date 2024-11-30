@@ -40,11 +40,46 @@ on:
         required: false
         default: ''
         type: string
+      tag_pattern:
+        description: 'Name of the branch containing releases.'
+        required: false
+        default: '(v|r)?[0-9]+(\.[0-9]+){0,2}(-(dev|alpha|beta|rc)([0-9]*))?'
+        type: string
+      auto_tag:
+        description: 'Automatically add and push a tag.'
+        required: false
+        default: true
+        type: boolean
+      workflow:
+        description: 'Workflow to start after adding a tag.'
+        required: false
+        default: 'Pipeline.yml'
+        type: string
       label:
         description: 'Label the pull request must be marked with.'
         required: false
         default: ''
         type: string
+
+    outputs:
+      is_release:
+        description: ""
+        value: ${{ jobs.FindPullRequest.outputs.is_release }}
+      version:
+        description: ""
+        value: ${{ jobs.FindPullRequest.outputs.version }}
+      pr_title:
+        description: ""
+        value: ${{ jobs.FindPullRequest.outputs.pr_title }}
+      pr_number:
+        description: ""
+        value: ${{ jobs.FindPullRequest.outputs.pr_number }}
+      pr_mergedby:
+        description: ""
+        value: ${{ jobs.FindPullRequest.outputs.pr_mergedby }}
+      pr_mergedat:
+        description: ""
+        value: ${{ jobs.FindPullRequest.outputs.pr_mergedat }}
 
 jobs:
   AddTag:
@@ -55,7 +90,9 @@ jobs:
     permissions:
       contents: write
       actions: write
-#      attestations: write
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
 
     steps:
       - name: ⏬ Checkout repository
@@ -64,46 +101,136 @@ jobs:
           # The command 'git describe' (used for version) needs the history.
           fetch-depth: 0
 
-      - name: 📑 Create Release Page
-        id: testing
+      - name: 🔁 Find merged PullRequest from second parent of current SHA (${{ github.sha }})
+        id: FindPullRequest
         run: |
+          set +e
+
+          ANSI_LIGHT_RED="\e[91m"
+          ANSI_LIGHT_GREEN="\e[92m"
+          ANSI_LIGHT_YELLOW="\e[93m"
+          ANSI_NOCOLOR="\e[0m"
+          
           export GH_TOKEN=${{ github.token }}
           
-          echo "github.ref=${{ github.ref }}"
+          echo -n "commit check: "
+          if [[ "${{ github.ref }}" == "refs/heads/${{ inputs.release_branch }}" ]]; then
+            if [[ -z "$(git rev-list -1 --merges ${{ github.sha }}~1..${{ github.sha }})" ]]; then
+              echo "is_release=false" >> $GITHUB_OUTPUT
+              echo -en "${ANSI_LIGHT_YELLOW}normal "
+            else
+              echo "is_release=true" >> $GITHUB_OUTPUT
+              echo -en "${ANSI_LIGHT_GREEN}merge "
+            fi
+            echo -e "commit${ANSI_NOCOLOR} on '${{ inputs.release_branch }}' branch"
+          else
+            echo "is_release=false" >> $GITHUB_OUTPUT
+            echo -e "${ANSI_LIGHT_RED}other commit${ANSI_NOCOLOR} on '${{ github.ref }}' branch"
+          fi
+        
+          echo -n "Read second parent of current SHA (${{ github.ref }}) ... "
+          FATHER_SHA=$(git rev-list -1 ${{ github.ref }}^2)
+          if [[ $? -ne 0 || "{FATHER_SHA}" == "" ]]; then
+            echo -e "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}"
+            echo "Couldn't read second parent (father) of '${{ github.ref }}^2'."
+            echo "::error title=GitCommitHistoryError::Couldn't read second parent (father) of '${{ github.ref }}^2'. -> ${FATHER_SHA}"
+            exit 1
+          else
+            echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+          fi
           
-          gh pr list --base ${{ inputs.release_branch }} --label Release --state merged --json title
-          echo "return code: $?"
-
-          gh pr list --base ${{ inputs.release_branch }} --label Release --state merged --json title --jq '.[0].title'
-          echo "return code: $?"
-
-          version=$(gh pr list --base ${{ inputs.release_branch }} --label Release --state merged --json title --jq '.[0].title')
-
-      - name: 🔁 Extract Git tag from GITHUB_REF
-        id: latestpullrequest
-        run: |
-          export GH_TOKEN=${{ github.token }}
+          echo -n "Search Pull Request to '${{ inputs.release_branch }}' and branch containing SHA ${FATHER_SHA} ... "
+          PULL_REQUESTS=$(gh pr list --base "${{ inputs.release_branch }}" --search "${FATHER_SHA}" --state "merged" --json "title,number,mergedBy,mergedAt")
+          if [[ $? -ne 0 || "${PULL_REQUESTS}" == "" ]]; then
+            echo -e "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}"
+            echo "Couldn't find a merged Pull Request to '${{ inputs.release_branch }}'. -> ${PULL_REQUESTS}"
+            echo "::error title=PullRequest::Couldn't find a merged Pull Request to '${{ inputs.release_branch }}'. -> ${PULL_REQUESTS}"
+            exit 1
+          else
+            echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
           
-          RELEASE_VERSION=$(gh pr list --base ${{ inputs.release_branch }} --label Release --state merged --json title --jq '.[0].title')
-          if [[ $? -ne 0 || "{RELEASE_VERSION}" == "" ]]; then
-            echo "Couldn't find a merged Pull Request to '${{ inputs.release_branch }}'."
-            echo "::error title=Pull Request::Couldn't find a merged Pull Request to '${{ inputs.release_branch }}'."
+            PR_TITLE="$(    echo "${PULL_REQUESTS}" | jq --raw-output ".[0].title")"
+            PR_NUMBER="$(   echo "${PULL_REQUESTS}" | jq --raw-output ".[0].number")"
+            PR_MERGED_BY="$(echo "${PULL_REQUESTS}" | jq --raw-output ".[0].mergedBy.login")"
+            PR_MERGED_AT="$(echo "${PULL_REQUESTS}" | jq --raw-output ".[0].mergedAt")"
           
-            echo "Pull Requests to '${{ inputs.release_branch }}':"
-            gh pr list --base ${{ inputs.release_branch }}
+            echo -e "Found Pull Request:"
+            echo -e "  Title:    ${PR_TITLE}"
+            echo -e "  Number:   ${PR_NUMBER}"
+            echo -e "  MergedBy: ${PR_MERGED_BY}"
+            echo -e "  MergedAt: ${PR_MERGED_AT} ($(date -d"${PR_MERGED_AT}" '+%d.%m.%Y - %H:%M:%S'))"
+          fi
           
+          TAG_PATTERN='^${{ inputs.tag_pattern }}$'
+          echo -n "Check Pull Request title against regexp '${TAG_PATTERN}' ... "
+          if [[ "${PR_TITLE}" =~ $TAG_PATTERN ]]; then
+            echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+            RELEASE_VERSION="${PR_TITLE}"
+          else
+            echo -e "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}"
+            echo "Pull Request title '${PR_TITLE}' doesn't conform to regexp '${TAG_PATTERN}'."
+            echo "::error title=RexExpCheck::Pull Request title '${PR_TITLE}' doesn't conform to regexp '${TAG_PATTERN}'."
             exit 1
           fi
           
-          echo "Version tag: ${RELEASE_VERSION}"
+          echo -e "Release tag: ${ANSI_LIGHT_GREEN}${RELEASE_VERSION}${ANSI_NOCOLOR}"
           echo "version=${RELEASE_VERSION}" >> $GITHUB_OUTPUT
+          echo "pr_title=${PR_TITLE}" >> $GITHUB_OUTPUT
+          echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+          echo "pr_mergedby=${PR_MERGED_BY}" >> $GITHUB_OUTPUT
+          echo "pr_mergedat=${PR_MERGED_AT}" >> $GITHUB_OUTPUT
 
-      - name: "🏷 Create release tag '${{ steps.latestpullrequest.outputs.version }}'"
-        id: createReleaseTag
-        if: startsWith(steps.latestpullrequest.outputs.version, 'v')
+      - name: 📑 Only if release merge
+        if: steps.FindPullRequest.outputs.is_release == 'true'
         run: |
-            git config --local user.email "ReleaseTagging@users.noreply.github.com"
-            git config --local user.name "Paebbels/Actions: Release Tagging"
+          echo "should be printed"
 
-            git tag "${{ steps.latestpullrequest.outputs.version }}"
-            git push origin "${{ steps.latestpullrequest.outputs.version }}"
+      - name: 📑 Never if release merge
+        if: steps.FindPullRequest.outputs.is_release != 'true'
+        run: |
+          echo "should be skipped"
+
+      - name: 🏷 Create release tag '${{ steps.FindPullRequest.outputs.version }}'
+        id: createReleaseTag
+        if: inputs.auto_tag
+        run: |
+          set +e
+
+          ANSI_LIGHT_RED="\e[91m"
+          ANSI_LIGHT_GREEN="\e[92m"
+          ANSI_NOCOLOR="\e[0m"
+          
+          export GH_TOKEN=${{ github.token }}
+          
+          echo "Token length: ${#GITHUB_TOKEN}"
+        
+          echo "git config --local user.email \"ReleaseTagging@users.noreply.github.com\""
+          git config --local user.email "ReleaseTagging@users.noreply.github.com"
+          
+          echo "git config --local user.name \"Paebbels/Actions: Release Tagging\""
+          git config --local user.name "Paebbels/Actions: Release Tagging"
+
+          echo "git tag \"${{ steps.FindPullRequest.outputs.version }}\""
+          git tag "${{ steps.FindPullRequest.outputs.version }}"
+        
+          echo -n "git push origin \"${{ steps.FindPullRequest.outputs.version }}\" "
+          git push origin "${{ steps.FindPullRequest.outputs.version }}"
+          if [[ $? -ne 0 ]]; then
+            echo -e "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}"
+            echo "Failed to push tag '${{ steps.FindPullRequest.outputs.version }}'."
+            echo "::error title=GitPush::Failed to push tag '${{ steps.FindPullRequest.outputs.version }}'."
+            exit 1
+          else
+            echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+          fi
+
+#          echo -n "Trigger workflow '${{ inputs.workflow }}' ..."
+#          gh workflow run "${{ inputs.workflow }}" --ref "${{ steps.FindPullRequest.outputs.version }}"
+#          if [[ $? -ne 0 ]]; then
+#            echo -e "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}"
+#            echo "Failed to trigger workflow '${{ inputs.workflow }}' for tag '${{ steps.FindPullRequest.outputs.version }}'."
+#            echo "::error title=WorkflowTrigger::Failed to trigger workflow '${{ inputs.workflow }}' for tag '${{ steps.FindPullRequest.outputs.version }}'."
+#            exit 1
+#          else
+#            echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+#          fi

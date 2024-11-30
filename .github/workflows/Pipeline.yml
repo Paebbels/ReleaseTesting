@@ -120,7 +120,7 @@ jobs:
     uses: ./.github/workflows/Tagging.yml
     needs:
       - Build
-      - Nightly
+#      - Nightly
     secrets: inherit
     permissions:
       contents: write
