@@ -180,6 +180,8 @@ jobs:
             printf "%s\n" "Pull Request title '${PR_TITLE}' doesn't conform to regexp '${TAG_PATTERN}'."
             printf "%s\n" "::error title=RexExpCheck::Pull Request title '${PR_TITLE}' doesn't conform to regexp '${TAG_PATTERN}'."
             exit 1
+          else
+            echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
           fi
           
           printf "Release tag: ${ANSI_LIGHT_GREEN}%s${ANSI_NOCOLOR}\n" "${RELEASE_VERSION}"
