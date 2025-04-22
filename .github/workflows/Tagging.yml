@@ -40,11 +40,46 @@ on:
         required: false
         default: ''
         type: string
+      tag_pattern:
+        description: 'Name of the branch containing releases.'
+        required: false
+        default: '(v|r)?[0-9]+(\.[0-9]+){0,2}(-(dev|alpha|beta|rc)([0-9]*))?'
+        type: string
+      auto_tag:
+        description: 'Automatically add and push a tag.'
+        required: false
+        default: true
+        type: boolean
+      workflow:
+        description: 'Workflow to start after adding a tag.'
+        required: false
+        default: 'Pipeline.yml'
+        type: string
       label:
         description: 'Label the pull request must be marked with.'
         required: false
         default: ''
         type: string
+
+    outputs:
+      is_release:
+        description: ""
+        value: ${{ jobs.FindPullRequest.outputs.is_release }}
+      version:
+        description: ""
+        value: ${{ jobs.FindPullRequest.outputs.version }}
+      pr_title:
+        description: ""
+        value: ${{ jobs.FindPullRequest.outputs.pr_title }}
+      pr_number:
+        description: ""
+        value: ${{ jobs.FindPullRequest.outputs.pr_number }}
+      pr_mergedby:
+        description: ""
+        value: ${{ jobs.FindPullRequest.outputs.pr_mergedby }}
+      pr_mergedat:
+        description: ""
+        value: ${{ jobs.FindPullRequest.outputs.pr_mergedat }}
 
 jobs:
   AddTag:
@@ -55,7 +90,9 @@ jobs:
     permissions:
       contents: write
       actions: write
-#      attestations: write
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
 
     steps:
       - name: ⏬ Checkout repository
@@ -64,82 +101,115 @@ jobs:
           # The command 'git describe' (used for version) needs the history.
           fetch-depth: 0
 
-      - name: 🖉 Info
-        id: CommitCheck
+      - name: 🔁 Find merged PullRequest from second parent of current SHA (${{ github.sha }})
+        id: FindPullRequest
         run: |
-          echo "github.event_name: ${{ github.event_name }}"
-          echo "github.actor:      ${{ github.actor }}"
-          echo "github.ref:        ${{ github.ref }}"
-          echo "github.base_ref:   ${{ github.base_ref }}"
-          echo "github.head_ref:   ${{ github.head_ref }}"
-          echo "github.sha:        ${{ github.sha }}"
+          set +e
+
+          ANSI_LIGHT_RED=$'\x1b[91m'
+          ANSI_LIGHT_GREEN=$'\x1b[92m'
+          ANSI_LIGHT_YELLOW=$'\x1b[93m'
+          ANSI_LIGHT_BLUE=$'\x1b[94m'
+          ANSI_NOCOLOR=$'\x1b[0m'
           
-          echo -n "commit check: "
-          if [[ "${{ github.ref }}" == "refs/head/${{ inputs.release_branch }}" ]]; then
-            if [[ -z "$(git rev-list -1 --merges ${{ github.sha }}~1..${{ github.sha }})" ]]; then
-              echo "is_release=false" >> $GITHUB_OUTPUT
-              echo -n "normal "
+          export GH_TOKEN=${{ github.token }}
+   
+          printf "%s" "commit check: "
+          if [[ "${{ github.ref }}" == "refs/heads/${{ inputs.release_branch }}" ]]; then
+            printf "git rev-list -1 --merges ${{ github.sha }}~1..${{ github.sha }} "
+            git rev-list -1 --merges ${{ github.sha }}~1..${{ github.sha }}
+            if [[ $? -eq 0 ]]; then
+              printf "[OK]\n"
             else
-              echo "is_release=true" >> $GITHUB_OUTPUT
-              echo -n "merge "
+              printf "[FAILED]\n"
             fi
-            echo "commit on '${{ inputs.release_branch }}' branch"
+            if [[ -z "$(git rev-list -1 --merges ${{ github.sha }}~1..${{ github.sha }})" ]]; then
+              printf "%s\n" "is_release=false" >> $GITHUB_OUTPUT
+              echon "${ANSI_LIGHT_YELLOW}normal "
+            else
+              printf "%s\n" "is_release=true" >> $GITHUB_OUTPUT
+              echon "${ANSI_LIGHT_GREEN}merge "
+            fi
+            printf "%s\n" "commit${ANSI_NOCOLOR} on '${{ inputs.release_branch }}' branch"
           else
-            echo "is_release=false" >> $GITHUB_OUTPUT
-            echo "other commit on '${{ github.ref }}' branch"
+            printf "%s\n" "is_release=false" >> $GITHUB_OUTPUT
+            printf "${ANSI_LIGHT_RED}commit is not on release branch '%s' but on '%s'${ANSI_NOCOLOR}\n" "${{ inputs.release_branch }}" "${{ github.ref }}"
+            exit 1
           fi
-
-      - name: 📑 Create Release Page
-        if: steps.CommitCheck.outputs.is_release
-        run: |
-          echo "should be skipped"
-
-      - name: 📑 Create Release Page
-        id: testing
-        run: |
-          export GH_TOKEN=${{ github.token }}
+        
+          printf "%s" "Read second parent of current SHA (${{ github.ref }}) ... "
+          FATHER_SHA=$(git rev-parse ${{ github.ref }}^2)
+          if [[ $? -ne 0 || "{FATHER_SHA}" == "" ]]; then
+            printf "%s\n" "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}"
+            printf "%s\n" "Couldn't read second parent (father) of '${{ github.ref }}^2'."
+            printf "%s\n" "::error title=GitCommitHistoryError::Couldn't read second parent (father) of '${{ github.ref }}^2'. -> ${FATHER_SHA}"
+            exit 1
+          else
+            printf "%s\n" "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+          fi
           
-          echo "github.ref=${{ github.ref }}"
+          printf "%s" "Search Pull Request to '${{ inputs.release_branch }}' and branch containing SHA ${FATHER_SHA} ... "
+          PULL_REQUESTS=$(gh pr list --base "${{ inputs.release_branch }}" --search "${FATHER_SHA}" --state "merged" --json "title,number,mergedBy,mergedAt")
+          if [[ $? -ne 0 || "${PULL_REQUESTS}" == "" ]]; then
+            printf "%s\n" "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}"
+            printf "%s\n" "Couldn't find a merged Pull Request to '${{ inputs.release_branch }}'. -> ${PULL_REQUESTS}"
+            printf "%s\n" "::error title=PullRequest::Couldn't find a merged Pull Request to '${{ inputs.release_branch }}'. -> ${PULL_REQUESTS}"
+            exit 1
+          else
+            printf "%s\n" "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
           
-          parent2SHA=$(git rev-list -1 ${{ github.ref }}^2)
+            PR_TITLE="$(    printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].title")"
+            PR_NUMBER="$(   printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].number")"
+            PR_MERGED_BY="$(printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].mergedBy.login")"
+            PR_MERGED_AT="$(printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].mergedAt")"
           
-          echo "gh pr list --base \"${{ inputs.release_branch }}\" --search \"${parent2SHA}\" --label \"Release\" --state \"merged\" --json \"title\""
-          gh pr list --base "${{ inputs.release_branch }}" --search "${parent2SHA}" --label "Release" --state "merged" --json "title"
-          echo "return code: $?"
+            printf "${ANSI_LIGHT_BLUE}Found Pull Request:${ANSI_NOCOLOR}\n"
+            printf "  %s\n" "Title:    ${PR_TITLE}"
+            printf "  %s\n" "Number:   ${PR_NUMBER}"
+            printf "  %s\n" "MergedBy: ${PR_MERGED_BY}"
+            printf "  %s\n" "MergedAt: ${PR_MERGED_AT} ($(date -d"${PR_MERGED_AT}" '+%d.%m.%Y - %H:%M:%S'))"
+          fi
           
-          gh pr list --base ${{ inputs.release_branch }} --label Release --state merged --json title
-          echo "return code: $?"
-
-          gh pr list --base ${{ inputs.release_branch }} --label Release --state merged --json title --jq '.[0].title'
-          echo "return code: $?"
-
-          version=$(gh pr list --base ${{ inputs.release_branch }} --label Release --state merged --json title --jq '.[0].title')
-
-      - name: 🔁 Extract Git tag from GITHUB_REF
-        id: latestpullrequest
-        run: |
-          export GH_TOKEN=${{ github.token }}
-          
-          RELEASE_VERSION=$(gh pr list --base ${{ inputs.release_branch }} --label Release --state merged --json title --jq '.[0].title')
-          if [[ $? -ne 0 || "{RELEASE_VERSION}" == "" ]]; then
-            echo "Couldn't find a merged Pull Request to '${{ inputs.release_branch }}'."
-            echo "::error title=Pull Request::Couldn't find a merged Pull Request to '${{ inputs.release_branch }}'."
-          
-            echo "Pull Requests to '${{ inputs.release_branch }}':"
-            gh pr list --base ${{ inputs.release_branch }}
-          
+          TAG_PATTERN='^${{ inputs.tag_pattern }}$'
+          printf "%s" "Check Pull Request title against regexp '${TAG_PATTERN}' ... "
+          if [[ "${PR_TITLE}" =~ $TAG_PATTERN ]]; then
+            printf "%s\n" "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+            RELEASE_VERSION="${PR_TITLE}"
+          else
+            printf "%s\n" "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}"
+            printf "%s\n" "Pull Request title '${PR_TITLE}' doesn't conform to regexp '${TAG_PATTERN}'."
+            printf "%s\n" "::error title=RexExpCheck::Pull Request title '${PR_TITLE}' doesn't conform to regexp '${TAG_PATTERN}'."
             exit 1
           fi
           
-          echo "Version tag: ${RELEASE_VERSION}"
-          echo "version=${RELEASE_VERSION}" >> $GITHUB_OUTPUT
+          printf "Release tag: ${ANSI_LIGHT_GREEN}%s${ANSI_NOCOLOR}\n" "${RELEASE_VERSION}"
+          tee "${GITHUB_OUTPUT}" <<EOF
+          version=${RELEASE_VERSION}
+          pr_title=${PR_TITLE}
+          pr_number=${PR_NUMBER}
+          pr_mergedby=${PR_MERGED_BY}
+          pr_mergedat=${PR_MERGED_AT}
+          EOF
 
-      - name: "🏷 Create release tag '${{ steps.latestpullrequest.outputs.version }}'"
-        id: createReleaseTag
-        if: startsWith(steps.latestpullrequest.outputs.version, 'v')
+      - name: 📑 Only if release merge
+        if: steps.FindPullRequest.outputs.is_release == 'true'
         run: |
-            git config --local user.email "ReleaseTagging@users.noreply.github.com"
-            git config --local user.name "Paebbels/Actions: Release Tagging"
+          printf "%s\n" "should be printed"
 
-            git tag "${{ steps.latestpullrequest.outputs.version }}"
-            git push origin "${{ steps.latestpullrequest.outputs.version }}"
+      - name: 📑 Never if release merge
+        if: steps.FindPullRequest.outputs.is_release != 'true'
+        run: |
+          printf "%s\n" "should be skipped"
+
+      - name: 🏷 Create release tag '${{ steps.FindPullRequest.outputs.version }}'
+        uses: actions/github-script@v7
+        id: createReleaseTag
+        if: inputs.auto_tag && steps.FindPullRequest.outputs.is_release
+        with:
+          script: |
+            github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              ref:   'refs/tags/${{ steps.FindPullRequest.outputs.version }}',
+              sha:   context.sha
+            })

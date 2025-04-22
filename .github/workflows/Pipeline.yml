@@ -10,21 +10,31 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
+      - name: ⏬ Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # The command 'git describe' (used for version) needs the history.
+          fetch-depth: 0
+
       - name: 🖉 Info
         run: |
-          echo "github.event_name: ${{ github.event_name }}"
-          echo "github.event:      ${{ github.event }}"
-          echo "github.actor:      ${{ github.actor }}"
-          echo "github.ref:        ${{ github.ref }}"
-          echo "github.base_ref:   ${{ github.base_ref }}"
-          echo "github.head_ref:   ${{ github.head_ref }}"
-          echo "github.sha:        ${{ github.sha }}"
+          printf "%s\n" "github.event_name: ${{ github.event_name }}"
+          printf "%s\n" "github.actor:      ${{ github.actor }}"
+          printf "%s\n" "github.ref:        ${{ github.ref }}"
+          printf "%s\n" "github.base_ref:   ${{ github.base_ref }}"
+          printf "%s\n" "github.head_ref:   ${{ github.head_ref }}"
+          printf "%s\n" "github.sha:        ${{ github.sha }}"
+          if [[ -z "$(git rev-list -1 --merges ${{ github.sha }}~1..${{ github.sha }})" ]]; then
+            printf "%s\n" "gitismerge:        normal commit"
+          else
+            printf "%s\n" "gitismerge:        merge commit"
+          fi
 
       - name: 🖉 Build 1
         run: |
-          echo "Document 1 $(date --utc '+%d.%m.%Y - %H:%M:%S')"   > document1.txt
-          echo "Analysis log $(date --utc '+%d.%m.%Y - %H:%M:%S')" > analysis.log
-          echo "Build log $(date --utc '+%d.%m.%Y - %H:%M:%S')"    > build.log
+          printf "%s\n" "Document 1 $(date --utc '+%d.%m.%Y - %H:%M:%S')"   > document1.txt
+          printf "%s\n" "Analysis log $(date --utc '+%d.%m.%Y - %H:%M:%S')" > analysis.log
+          printf "%s\n" "Build log $(date --utc '+%d.%m.%Y - %H:%M:%S')"    > build.log
 
       - name: 📤 Upload artifact
         uses: actions/upload-artifact@v4
@@ -38,8 +48,8 @@ jobs:
 
       - name: 🖉 Program
         run: |
-          echo "Document other $(date --utc '+%d.%m.%Y - %H:%M:%S')" > document1.txt
-          echo "Program $(date --utc '+%d.%m.%Y - %H:%M:%S')"        > program.py
+          printf "%s\n" "Document other $(date --utc '+%d.%m.%Y - %H:%M:%S')" > document1.txt
+          printf "%s\n" "Program $(date --utc '+%d.%m.%Y - %H:%M:%S')"        > program.py
           
       - name: 📤 Upload artifact
         uses: actions/upload-artifact@v4
@@ -111,13 +121,14 @@ jobs:
     needs:
       - Build
       - Nightly
-    secrets: inherit
+#    if: github.ref == 'refs/heads/main'
     permissions:
       contents: write
       actions: write
 #      attestations: write
     with:
       label: 'Release'
+    secrets: inherit
 
   ReleasePage:
     uses: ./.github/workflows/Release.yml
