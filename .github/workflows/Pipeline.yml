@@ -91,9 +91,8 @@ jobs:
     permissions:
       contents: write
 #      actions: write
-#      attestations: write
-    with:
-      label: 'Release'
+#    with:
+#      label: 'Release'
     secrets: inherit
 
   Release:
