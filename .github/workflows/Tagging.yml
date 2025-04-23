@@ -64,28 +64,35 @@ on:
     outputs:
       is_release:
         description: ""
-        value: ${{ jobs.FindPullRequest.outputs.is_release }}
+        value: ${{ jobs.AddTag.outputs.is_release }}
       version:
         description: ""
-        value: ${{ jobs.FindPullRequest.outputs.version }}
+        value: ${{ jobs.AddTag.outputs.version }}
       pr_title:
         description: ""
-        value: ${{ jobs.FindPullRequest.outputs.pr_title }}
+        value: ${{ jobs.AddTag.outputs.pr_title }}
       pr_number:
         description: ""
-        value: ${{ jobs.FindPullRequest.outputs.pr_number }}
+        value: ${{ jobs.AddTag.outputs.pr_number }}
       pr_mergedby:
         description: ""
-        value: ${{ jobs.FindPullRequest.outputs.pr_mergedby }}
+        value: ${{ jobs.AddTag.outputs.pr_mergedby }}
       pr_mergedat:
         description: ""
-        value: ${{ jobs.FindPullRequest.outputs.pr_mergedat }}
+        value: ${{ jobs.AddTag.outputs.pr_mergedat }}
 
 jobs:
   AddTag:
     name: "🏷 Create 'Release Tag' on GitHub"
     runs-on: ${{ inputs.ubuntu_image }}
     if: github.ref == 'refs/heads/${{ inputs.release_branch }}'
+    outputs:
+      is_release:  ${{ steps.FindPullRequest.outputs.is_release }}
+      version:     ${{ steps.FindPullRequest.outputs.version }}
+      pr_title:    ${{ steps.FindPullRequest.outputs.pr_title }}
+      pr_number:   ${{ steps.FindPullRequest.outputs.pr_number }}
+      pr_mergedby: ${{ steps.FindPullRequest.outputs.pr_mergedby }}
+      pr_mergedat: ${{ steps.FindPullRequest.outputs.pr_mergedat }}
 
     permissions:
       contents: write
@@ -116,21 +123,14 @@ jobs:
    
           printf "%s" "commit check: "
           if [[ "${{ github.ref }}" == "refs/heads/${{ inputs.release_branch }}" ]]; then
-            printf "git rev-list -1 --merges ${{ github.sha }}~1..${{ github.sha }} "
-            git rev-list -1 --merges ${{ github.sha }}~1..${{ github.sha }}
-            if [[ $? -eq 0 ]]; then
-              printf "[OK]\n"
-            else
-              printf "[FAILED]\n"
-            fi
             if [[ -z "$(git rev-list -1 --merges ${{ github.sha }}~1..${{ github.sha }})" ]]; then
               printf "%s\n" "is_release=false" >> $GITHUB_OUTPUT
-              echon "${ANSI_LIGHT_YELLOW}normal "
+              printf "${ANSI_LIGHT_YELLOW}normal "
             else
               printf "%s\n" "is_release=true" >> $GITHUB_OUTPUT
-              echon "${ANSI_LIGHT_GREEN}merge "
+              printf "${ANSI_LIGHT_GREEN}merge "
             fi
-            printf "%s\n" "commit${ANSI_NOCOLOR} on '${{ inputs.release_branch }}' branch"
+            printf "commit${ANSI_NOCOLOR} on '%s' branch\n" "${{ inputs.release_branch }}"
           else
             printf "%s\n" "is_release=false" >> $GITHUB_OUTPUT
             printf "${ANSI_LIGHT_RED}commit is not on release branch '%s' but on '%s'${ANSI_NOCOLOR}\n" "${{ inputs.release_branch }}" "${{ github.ref }}"
@@ -180,8 +180,6 @@ jobs:
             printf "${ANSI_LIGHT_RED}Pull Request title '%s' doesn't conform to regexp '%s'.${ANSI_NOCOLOR}\n" "${PR_TITLE}" "${TAG_PATTERN}"
             printf "::error title=RexExpCheck::Pull Request title '%s' doesn't conform to regexp '%s'.\n" "${PR_TITLE}" "${TAG_PATTERN}"
             exit 1
-          else
-            echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
           fi
           
           printf "Release tag: ${ANSI_LIGHT_GREEN}%s${ANSI_NOCOLOR}\n" "${RELEASE_VERSION}"
@@ -193,15 +191,14 @@ jobs:
           pr_mergedat=${PR_MERGED_AT}
           EOF
 
-      - name: 📑 Only if release merge
-        if: steps.FindPullRequest.outputs.is_release == 'true'
+      - name: 📑 Debugging
         run: |
-          printf "%s\n" "should be printed"
-
-      - name: 📑 Never if release merge
-        if: steps.FindPullRequest.outputs.is_release != 'true'
-        run: |
-          printf "%s\n" "should be skipped"
+          printf "auto_tag:   %s\n" "${{ inputs.auto_tag }}"
+          printf "workflow:   %s\n" "${{ inputs.workflow }}"
+          printf "is_release: %s\n" "${{ steps.FindPullRequest.outputs.is_release }}"
+          printf "version:    %s\n" "${{ steps.FindPullRequest.outputs.version }}"
+          printf "pr_title:   %s\n" "${{ steps.FindPullRequest.outputs.pr_title }}"
+          printf "pr_number:  %s\n" "${{ steps.FindPullRequest.outputs.pr_number }}"
 
       - name: 🏷 Create release tag '${{ steps.FindPullRequest.outputs.version }}'
         uses: actions/github-script@v7
@@ -214,4 +211,17 @@ jobs:
               repo:  context.repo.repo,
               ref:   'refs/tags/${{ steps.FindPullRequest.outputs.version }}',
               sha:   context.sha
+            })
+
+      - name: Trigger Workflow
+        uses: actions/github-script@v7
+        id: runReleaseTag
+        if: inputs.auto_tag && steps.FindPullRequest.outputs.is_release
+        with:
+          script: |
+            github.rest.actions.createWorkflowDispatch({
+              owner:       context.repo.owner,
+              repo:        context.repo.repo,
+              workflow_id: '${{ inputs.workflow }}',
+              ref:         '${{ steps.FindPullRequest.outputs.version }}'
             })
