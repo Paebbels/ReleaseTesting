@@ -87,8 +87,8 @@ jobs:
     runs-on: ${{ inputs.ubuntu_image }}
     if: github.ref == 'refs/heads/${{ inputs.release_branch }}'
 
-#    permissions:
-#      contents: write
+    permissions:
+      contents: write
 #      actions: write
 
     env:
@@ -141,8 +141,8 @@ jobs:
           FATHER_SHA=$(git rev-parse ${{ github.ref }}^2)
           if [[ $? -ne 0 || "{FATHER_SHA}" == "" ]]; then
             printf "%s\n" "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}"
-            printf "%s\n" "Couldn't read second parent (father) of '${{ github.ref }}^2'."
-            printf "%s\n" "::error title=GitCommitHistoryError::Couldn't read second parent (father) of '${{ github.ref }}^2'. -> ${FATHER_SHA}"
+            printf "${ANSI_LIGHT_RED}Couldn't read second parent (father) of '%s'.${ANSI_NOCOLOR}\n" "${{ github.ref }}^2"
+            printf "::error title=GitCommitHistoryError::Couldn't read second parent (father) of '%s'. -> %s\n" "${{ github.ref }}^2" "${FATHER_SHA}"
             exit 1
           else
             printf "%s\n" "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
@@ -152,8 +152,8 @@ jobs:
           PULL_REQUESTS=$(gh pr list --base "${{ inputs.release_branch }}" --search "${FATHER_SHA}" --state "merged" --json "title,number,mergedBy,mergedAt")
           if [[ $? -ne 0 || "${PULL_REQUESTS}" == "" ]]; then
             printf "%s\n" "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}"
-            printf "%s\n" "Couldn't find a merged Pull Request to '${{ inputs.release_branch }}'. -> ${PULL_REQUESTS}"
-            printf "%s\n" "::error title=PullRequest::Couldn't find a merged Pull Request to '${{ inputs.release_branch }}'. -> ${PULL_REQUESTS}"
+            printf "${ANSI_LIGHT_RED}Couldn't find a merged Pull Request to '%s'. -> %s${ANSI_NOCOLOR}\n" "${{ inputs.release_branch }}" "${PULL_REQUESTS}"
+            printf "::error title=PullRequest::Couldn't find a merged Pull Request to '%s'. -> %s\n" "${{ inputs.release_branch }}" "${PULL_REQUESTS}"
             exit 1
           else
             printf "%s\n" "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
@@ -177,15 +177,15 @@ jobs:
             RELEASE_VERSION="${PR_TITLE}"
           else
             printf "%s\n" "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}"
-            printf "%s\n" "Pull Request title '${PR_TITLE}' doesn't conform to regexp '${TAG_PATTERN}'."
-            printf "%s\n" "::error title=RexExpCheck::Pull Request title '${PR_TITLE}' doesn't conform to regexp '${TAG_PATTERN}'."
+            printf "${ANSI_LIGHT_RED}Pull Request title '%s' doesn't conform to regexp '%s'.${ANSI_NOCOLOR}\n" "${PR_TITLE}" "${TAG_PATTERN}"
+            printf "::error title=RexExpCheck::Pull Request title '%s' doesn't conform to regexp '%s'.\n" "${PR_TITLE}" "${TAG_PATTERN}"
             exit 1
           else
             echo -e "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
           fi
           
           printf "Release tag: ${ANSI_LIGHT_GREEN}%s${ANSI_NOCOLOR}\n" "${RELEASE_VERSION}"
-          tee "${GITHUB_OUTPUT}" <<EOF
+          tee --append "${GITHUB_OUTPUT}" <<EOF
           version=${RELEASE_VERSION}
           pr_title=${PR_TITLE}
           pr_number=${PR_NUMBER}

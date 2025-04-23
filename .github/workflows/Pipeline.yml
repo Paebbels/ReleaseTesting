@@ -87,12 +87,11 @@ jobs:
       - Build
       - Nightly
     if: github.ref == 'refs/heads/main'
-#    permissions:
-#      contents: write
+    permissions:
+      contents: write
 #      actions: write
-#      attestations: write
-    with:
-      label: 'Release'
+#    with:
+#      label: 'Release'
     secrets: inherit
 
   Release:
