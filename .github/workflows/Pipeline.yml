@@ -66,6 +66,7 @@ jobs:
     uses: ./.github/workflows/Nightly.yml
     needs:
       - Build
+    if: github.ref == 'refs/heads/dev'
     secrets: inherit
     permissions:
       contents: write
@@ -87,7 +88,7 @@ jobs:
     needs:
       - Build
       - Nightly
-#    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: write  # required for create tag
       actions:  write  # required for trigger workflow
