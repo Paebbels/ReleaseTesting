@@ -87,8 +87,8 @@ jobs:
     runs-on: ${{ inputs.ubuntu_image }}
     if: github.ref == 'refs/heads/${{ inputs.release_branch }}'
 
-#    permissions:
-#      contents: write
+    permissions:
+      contents: write
 #      actions: write
 
     env:
