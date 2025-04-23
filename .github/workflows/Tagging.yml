@@ -94,9 +94,9 @@ jobs:
       pr_mergedby: ${{ steps.FindPullRequest.outputs.pr_mergedby }}
       pr_mergedat: ${{ steps.FindPullRequest.outputs.pr_mergedat }}
 
-    permissions:
-      contents: write
-      actions: write
+#    permissions:
+#      contents: write
+#      actions: write
 
     env:
       GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
