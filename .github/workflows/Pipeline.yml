@@ -78,7 +78,6 @@ jobs:
       - Prepare
       - Build
       - Nightly
-    if: github.ref == 'refs/heads/main'
     permissions:
       contents: write  # required for create tag
       actions:  write  # required for trigger workflow

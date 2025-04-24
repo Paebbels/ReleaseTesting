@@ -37,7 +37,7 @@ on:
       auto_tag:
         description: 'Automatically add and push a tag.'
         required: true
-        type: boolean
+        type: string
       workflow:
         description: 'Workflow to start after adding a tag.'
         required: false
@@ -48,6 +48,8 @@ jobs:
   AutoTag:
     name: "🏷 Create 'Release Tag' on GitHub"
     runs-on: ${{ inputs.ubuntu_image }}
+    if: inputs.auto_tag == 'true'
+
 #    if: github.ref == 'refs/heads/${{ inputs.release_branch }}'
 
     permissions:
@@ -58,7 +60,7 @@ jobs:
       - name: 🏷 Create release tag '${{ steps.FindPullRequest.outputs.version }}'
         uses: actions/github-script@v7
         id: createReleaseTag
-        if: inputs.auto_tag
+        if: inputs.auto_tag == 'true'
         with:
           script: |
             github.rest.git.createRef({
@@ -71,7 +73,7 @@ jobs:
       - name: Trigger Workflow
         uses: actions/github-script@v7
         id: runReleaseTag
-        if: inputs.auto_tag
+        if: inputs.auto_tag == 'true'
         with:
           script: |
             github.rest.actions.createWorkflowDispatch({
