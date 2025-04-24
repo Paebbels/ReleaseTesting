@@ -187,9 +187,9 @@ jobs:
               exit 1
             fi
           
-            git branch --remotes --contains $(git rev-parse --verify "tags/${tag}~0") | grep "remotes/origin/${{ inputs.release_branch }}"
+            git branch --remotes --contains $(git rev-parse --verify "tags/${tag}~0") | grep "origin/${{ inputs.release_branch }}"
             printf "retCode: $?\n"
-            git branch --remotes --contains $(git rev-parse --verify "tags/${tag}~0") | grep "remotes/origin/${{ inputs.development_branch }}"
+            git branch --remotes --contains $(git rev-parse --verify "tags/${tag}~0") | grep "origin/${{ inputs.development_branch }}"
             printf "retCode: $?\n"
           
           else
