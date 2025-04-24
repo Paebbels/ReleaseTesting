@@ -52,20 +52,27 @@ jobs:
           retention-days: 1
 
   Nightly:
-    uses: ./.github/workflows/Nightly.yml
+    uses: ./.github/workflows/Release.yml
     needs:
       - Build
     if: startsWith(github.ref, 'refs/heads')
     permissions:
       contents: write
       actions: write
-#      attestations: write
     with:
-      prerelease: true
-      nightly_title: "Nächtliches Release"
-      nightly_description: |
+      mode:          nightly
+      prerelease:    true
+      release_name:  'nightly'
+      release_title: "Nightly Release"
+      release_description: |
         This *nightly* release contains all latest and important artifacts created by GHDL's CI pipeline.
-
+        
+        # %tool% %version%
+        
+        %%FOOTER%%
+      replacements: |
+        version=0.3.3
+        tool=myTool
       assets: |
         document: document1.txt:  Documentation
         document: build.log:      Logfile
@@ -86,11 +93,8 @@ jobs:
       auto_tag: ${{ needs.Prepare.outputs.is_release_commit }}
     secrets: inherit
 
-  # pre-release
-  # draft
-  # no delete / recreate => mode: nightly / release
   Release:
-    uses: ./.github/workflows/Nightly.yml
+    uses: ./.github/workflows/Release.yml
     needs:
       - Prepare
       - Build
@@ -99,12 +103,15 @@ jobs:
     permissions:
       contents: write
       actions: write
-#      attestations: write
     with:
-      nightly_name: ${{ needs.Prepare.outputs.version }}
-      nightly_description: |
+      release_name: ${{ needs.Prepare.outputs.version }}
+      release_description: |
         Full release
 
+      release_description_file: '.github/RELEASE.md'
+      replacements: |
+        version=${{ needs.Prepare.outputs.version }}
+        tool=myTool
       assets: |
         document: document1.txt:  Documentation
         document: build.log:      Logfile
