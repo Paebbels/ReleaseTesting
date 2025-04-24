@@ -60,12 +60,12 @@ on:
       version:
         description: ""
         value: ${{ jobs.Prepare.outputs.version }}
-#      pr_title:
-#        description: ""
-#        value: ${{ jobs.Prepare.outputs.pr_title }}
-#      pr_number:
-#        description: ""
-#        value: ${{ jobs.Prepare.outputs.pr_number }}
+      pr_title:
+        description: ""
+        value: ${{ jobs.Prepare.outputs.pr_title }}
+      pr_number:
+        description: ""
+        value: ${{ jobs.Prepare.outputs.pr_number }}
 #      pr_mergedby:
 #        description: ""
 #        value: ${{ jobs.Prepare.outputs.pr_mergedby }}
@@ -87,7 +87,7 @@ jobs:
       ref_kind:          ${{ steps.Classify.outputs.ref_kind }}
       branch:            ${{ steps.Classify.outputs.branch }}
       tag:               ${{ steps.Classify.outputs.tag }}
-      version:           ${{ steps.Classify.outputs.version || steps.FindPullRequest.outputs.release_version }}
+      version:           ${{ steps.Classify.outputs.version || steps.FindPullRequest.outputs.pr_version }}
 #      release_version:   ${{ steps.FindPullRequest.outputs.release_version }}
       pr_title:          ${{ steps.FindPullRequest.outputs.pr_title }}
       pr_number:         ${{ steps.FindPullRequest.outputs.pr_number }}

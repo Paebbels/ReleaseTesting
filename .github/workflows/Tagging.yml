@@ -46,7 +46,7 @@ on:
 
 jobs:
   AutoTag:
-    name: "🏷 Create 'Release Tag' on GitHub"
+    name: "🏷 Create tag '${{ inputs.version}}' on GitHub"
     runs-on: ${{ inputs.ubuntu_image }}
     if: inputs.auto_tag == 'true'
 
@@ -60,7 +60,7 @@ jobs:
       - name: 🏷 Create release tag '${{ steps.FindPullRequest.outputs.version }}'
         uses: actions/github-script@v7
         id: createReleaseTag
-        if: inputs.auto_tag == 'true'
+#        if: inputs.auto_tag == 'true'
         with:
           script: |
             github.rest.git.createRef({
@@ -73,7 +73,7 @@ jobs:
       - name: Trigger Workflow
         uses: actions/github-script@v7
         id: runReleaseTag
-        if: inputs.auto_tag == 'true'
+#        if: inputs.auto_tag == 'true'
         with:
           script: |
             github.rest.actions.createWorkflowDispatch({
