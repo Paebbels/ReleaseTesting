@@ -6,47 +6,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  Version:
-    name: Extract Version from Tag
-    runs-on: ubuntu-24.04
-    if: startsWith(github.ref, 'refs/tags')
-    outputs:
-      version:  ${{ steps.GetVersion.outputs.version }}
+  Prepare:
+    uses: ./.github/workflows/Prepare.yml
+#    with:
 
-    steps:
-      - name: 🖉 Info
-        run: |
-          printf "%s\n" "github.event_name: ${{ github.event_name }}"
-          printf "%s\n" "github.actor:      ${{ github.actor }}"
-          printf "%s\n" "github.ref:        ${{ github.ref }}"
-          printf "%s\n" "github.base_ref:   ${{ github.base_ref }}"
-          printf "%s\n" "github.head_ref:   ${{ github.head_ref }}"
-          printf "%s\n" "github.sha:        ${{ github.sha }}"
-          if [[ -z "$(git rev-list -1 --merges ${{ github.sha }}~1..${{ github.sha }})" ]]; then
-            printf "%s\n" "gitismerge:        normal commit"
-          else
-            printf "%s\n" "gitismerge:        merge commit"
-          fi
-
-      - name: Get version
-        id: GetVersion
-        run: |
-          set +e
-
-          ANSI_LIGHT_RED=$'\x1b[91m'
-          ANSI_LIGHT_BLUE=$'\x1b[94m'
-          ANSI_NOCOLOR=$'\x1b[0m'
-          
-          TAG_PATTERN='^refs/tags/((v|r)?[0-9]+(\.[0-9]+){0,2}(-(dev|alpha|beta|rc)([0-9]*))?)$'
-          if [[ "${{ github.ref }}" =~ $TAG_TAG_PATTERN ]]; then
-            version="${BASH_REMATCH[1]}"
-            printf "version=${version}\n" >> "${GITHUB_OUTPUT}"
-            printf "Version: ${ANSI_LIGHT_BLUE}%s${ANSI_NOCOLOR}\n" "${version}"
-          else
-            printf "${ANSI_LIGHT_RED}Tag '%s' doesn't conform to regexp '%s'.${ANSI_NOCOLOR}\n" "${{ github.ref }}" "${TAG_PATTERN}"
-            printf "::error title=RexExpCheck::Tag '%s' doesn't conform to regexp '%s'.\n" "${{ github.ref }}" "${TAG_PATTERN}"
-            exit 1
-          fi
 
   Build:
     name: Build something
@@ -58,20 +21,6 @@ jobs:
         with:
           # The command 'git describe' (used for version) needs the history.
           fetch-depth: 0
-
-      - name: 🖉 Info
-        run: |
-          printf "%s\n" "github.event_name: ${{ github.event_name }}"
-          printf "%s\n" "github.actor:      ${{ github.actor }}"
-          printf "%s\n" "github.ref:        ${{ github.ref }}"
-          printf "%s\n" "github.base_ref:   ${{ github.base_ref }}"
-          printf "%s\n" "github.head_ref:   ${{ github.head_ref }}"
-          printf "%s\n" "github.sha:        ${{ github.sha }}"
-          if [[ -z "$(git rev-list -1 --merges ${{ github.sha }}~1..${{ github.sha }})" ]]; then
-            printf "%s\n" "gitismerge:        normal commit"
-          else
-            printf "%s\n" "gitismerge:        merge commit"
-          fi
 
       - name: 🖉 Build 1
         run: |
@@ -138,10 +87,13 @@ jobs:
 #      label: 'Release'
     secrets: inherit
 
+  # pre-release
+  # draft
+  # no delete / recreate => mode: nightly / release
   Release:
     uses: ./.github/workflows/Nightly.yml
     needs:
-      - Version
+      - Prepare
       - Build
     if: startsWith(github.ref, 'refs/tags')
     secrets: inherit
@@ -150,7 +102,7 @@ jobs:
       actions: write
 #      attestations: write
     with:
-      nightly_name: ${{ needs.Version.outputs.version }}
+      nightly_name: ${{ needs.Prepare.outputs.version }}
       nightly_description: |
         Full release
 

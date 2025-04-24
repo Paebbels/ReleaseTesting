@@ -172,7 +172,7 @@ jobs:
           fi
           
           TAG_PATTERN='^${{ inputs.tag_pattern }}$'
-          printf "%s" "Check Pull Request title against regexp '${TAG_PATTERN}' ... "
+          printf "Check Pull Request title against regexp '%s' ... " "${TAG_PATTERN}"
           if [[ "${PR_TITLE}" =~ $TAG_PATTERN ]]; then
             printf "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}\n"
             RELEASE_VERSION="${PR_TITLE}"
