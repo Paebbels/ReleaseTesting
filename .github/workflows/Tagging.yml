@@ -20,7 +20,7 @@
 #                                                                                                                      #
 # SPDX-License-Identifier: Apache-2.0                                                                                  #
 # ==================================================================================================================== #
-name: Add Release Tag
+name: Auto Tag
 
 on:
   workflow_call:
@@ -30,199 +30,53 @@ on:
         required: false
         default: 'ubuntu-24.04'
         type: string
-      release_branch:
-        description: 'Name of the branch containing releases.'
-        required: false
-        default: 'main'
-        type: string
-      development_branch:
-        description: 'Name of the development branch containing features.'
-        required: false
-        default: ''
-        type: string
-      tag_pattern:
-        description: 'Name of the branch containing releases.'
-        required: false
-        default: '(v|r)?[0-9]+(\.[0-9]+){0,2}(-(dev|alpha|beta|rc)([0-9]*))?'
+      version:
+        description: 'Version used as tag name.'
+        required: true
         type: string
       auto_tag:
         description: 'Automatically add and push a tag.'
-        required: false
-        default: true
+        required: true
         type: boolean
       workflow:
         description: 'Workflow to start after adding a tag.'
         required: false
         default: 'Pipeline.yml'
         type: string
-      label:
-        description: 'Label the pull request must be marked with.'
-        required: false
-        default: ''
-        type: string
-
-    outputs:
-      is_release:
-        description: ""
-        value: ${{ jobs.AddTag.outputs.is_release }}
-      version:
-        description: ""
-        value: ${{ jobs.AddTag.outputs.version }}
-      pr_title:
-        description: ""
-        value: ${{ jobs.AddTag.outputs.pr_title }}
-      pr_number:
-        description: ""
-        value: ${{ jobs.AddTag.outputs.pr_number }}
-      pr_mergedby:
-        description: ""
-        value: ${{ jobs.AddTag.outputs.pr_mergedby }}
-      pr_mergedat:
-        description: ""
-        value: ${{ jobs.AddTag.outputs.pr_mergedat }}
 
 jobs:
-  AddTag:
+  AutoTag:
     name: "🏷 Create 'Release Tag' on GitHub"
     runs-on: ${{ inputs.ubuntu_image }}
-    if: startsWith(github.ref, 'refs/heads/${{ inputs.release_branch }}')
 #    if: github.ref == 'refs/heads/${{ inputs.release_branch }}'
-    outputs:
-      is_release:  ${{ steps.FindPullRequest.outputs.is_release }}
-      version:     ${{ steps.FindPullRequest.outputs.version }}
-      pr_title:    ${{ steps.FindPullRequest.outputs.pr_title }}
-      pr_number:   ${{ steps.FindPullRequest.outputs.pr_number }}
-      pr_mergedby: ${{ steps.FindPullRequest.outputs.pr_mergedby }}
-      pr_mergedat: ${{ steps.FindPullRequest.outputs.pr_mergedat }}
 
     permissions:
       contents: write   # required for tag creation
       actions: write    # required to start a new pipeline
 
-    env:
-      GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-
     steps:
-      - name: ⏬ Checkout repository
-        uses: actions/checkout@v4
-        with:
-          # The command 'git describe' (used for version) needs the history.
-          fetch-depth: 0
-
-      - name: 🔁 Find merged PullRequest from second parent of current SHA (${{ github.sha }})
-        id: FindPullRequest
-        run: |
-          set +e
-
-          ANSI_LIGHT_RED=$'\x1b[91m'
-          ANSI_LIGHT_GREEN=$'\x1b[92m'
-          ANSI_LIGHT_YELLOW=$'\x1b[93m'
-          ANSI_LIGHT_BLUE=$'\x1b[94m'
-          ANSI_NOCOLOR=$'\x1b[0m'
-          
-          export GH_TOKEN=${{ github.token }}
-   
-          printf "%s" "commit check: "
-          if [[ "${{ github.ref }}" == "refs/heads/${{ inputs.release_branch }}" ]]; then
-            if [[ -z "$(git rev-list -1 --merges ${{ github.sha }}~1..${{ github.sha }})" ]]; then
-              printf "is_release=false\n" >> $GITHUB_OUTPUT
-              printf "${ANSI_LIGHT_YELLOW}normal "
-            else
-              printf "is_release=true\n" >> $GITHUB_OUTPUT
-              printf "${ANSI_LIGHT_GREEN}merge "
-            fi
-            printf "commit${ANSI_NOCOLOR} on '%s' branch\n" "${{ inputs.release_branch }}"
-          else
-            printf "%s\n" "" >> $GITHUB_OUTPUT
-            printf "${ANSI_LIGHT_RED}commit is not on release branch '%s' but on '%s'${ANSI_NOCOLOR}\n" "${{ inputs.release_branch }}" "${{ github.ref }}"
-            exit 1
-          fi
-        
-          printf "%s" "Read second parent of current SHA (${{ github.ref }}) ... "
-          FATHER_SHA=$(git rev-parse ${{ github.ref }}^2)
-          if [[ $? -ne 0 || "{FATHER_SHA}" == "" ]]; then
-            printf "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}\n"
-            printf "${ANSI_LIGHT_RED}Couldn't read second parent (father) of '%s'.${ANSI_NOCOLOR}\n" "${{ github.ref }}^2"
-            printf "::error title=GitCommitHistoryError::Couldn't read second parent (father) of '%s'. -> %s\n" "${{ github.ref }}^2" "${FATHER_SHA}"
-            exit 1
-          else
-            printf "%s\n" "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
-          fi
-          
-          printf "%s" "Search Pull Request to '${{ inputs.release_branch }}' and branch containing SHA ${FATHER_SHA} ... "
-          PULL_REQUESTS=$(gh pr list --base "${{ inputs.release_branch }}" --search "${FATHER_SHA}" --state "merged" --json "title,number,mergedBy,mergedAt")
-          if [[ $? -ne 0 || "${PULL_REQUESTS}" == "" ]]; then
-            printf "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}\n"
-            printf "${ANSI_LIGHT_RED}Couldn't find a merged Pull Request to '%s'. -> %s${ANSI_NOCOLOR}\n" "${{ inputs.release_branch }}" "${PULL_REQUESTS}"
-            printf "::error title=PullRequest::Couldn't find a merged Pull Request to '%s'. -> %s\n" "${{ inputs.release_branch }}" "${PULL_REQUESTS}"
-            exit 1
-          else
-            printf "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}\n"
-          
-            PR_TITLE="$(    printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].title")"
-            PR_NUMBER="$(   printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].number")"
-            PR_MERGED_BY="$(printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].mergedBy.login")"
-            PR_MERGED_AT="$(printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].mergedAt")"
-          
-            printf "${ANSI_LIGHT_BLUE}Found Pull Request:${ANSI_NOCOLOR}\n"
-            printf "  %s\n" "Title:    ${PR_TITLE}"
-            printf "  %s\n" "Number:   ${PR_NUMBER}"
-            printf "  %s\n" "MergedBy: ${PR_MERGED_BY}"
-            printf "  %s\n" "MergedAt: ${PR_MERGED_AT} ($(date -d"${PR_MERGED_AT}" '+%d.%m.%Y - %H:%M:%S'))"
-          fi
-          
-          TAG_PATTERN='^${{ inputs.tag_pattern }}$'
-          printf "Check Pull Request title against regexp '%s' ... " "${TAG_PATTERN}"
-          if [[ "${PR_TITLE}" =~ $TAG_PATTERN ]]; then
-            printf "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}\n"
-            RELEASE_VERSION="${PR_TITLE}"
-          else
-            printf "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}\n"
-            printf "${ANSI_LIGHT_RED}Pull Request title '%s' doesn't conform to regexp '%s'.${ANSI_NOCOLOR}\n" "${PR_TITLE}" "${TAG_PATTERN}"
-            printf "::error title=RexExpCheck::Pull Request title '%s' doesn't conform to regexp '%s'.\n" "${PR_TITLE}" "${TAG_PATTERN}"
-            exit 1
-          fi
-          
-          printf "Release tag: ${ANSI_LIGHT_GREEN}%s${ANSI_NOCOLOR}\n" "${RELEASE_VERSION}"
-          tee --append "${GITHUB_OUTPUT}" <<EOF
-          version=${RELEASE_VERSION}
-          pr_title=${PR_TITLE}
-          pr_number=${PR_NUMBER}
-          pr_mergedby=${PR_MERGED_BY}
-          pr_mergedat=${PR_MERGED_AT}
-          EOF
-
-      - name: 📑 Debugging
-        run: |
-          printf "auto_tag:   %s\n" "${{ inputs.auto_tag }}"
-          printf "workflow:   %s\n" "${{ inputs.workflow }}"
-          printf "is_release: %s\n" "${{ steps.FindPullRequest.outputs.is_release }}"
-          printf "version:    %s\n" "${{ steps.FindPullRequest.outputs.version }}"
-          printf "pr_title:   %s\n" "${{ steps.FindPullRequest.outputs.pr_title }}"
-          printf "pr_number:  %s\n" "${{ steps.FindPullRequest.outputs.pr_number }}"
-
       - name: 🏷 Create release tag '${{ steps.FindPullRequest.outputs.version }}'
         uses: actions/github-script@v7
         id: createReleaseTag
-        if: inputs.auto_tag && steps.FindPullRequest.outputs.is_release
+        if: inputs.auto_tag
         with:
           script: |
             github.rest.git.createRef({
               owner: context.repo.owner,
               repo:  context.repo.repo,
-              ref:   'refs/tags/${{ steps.FindPullRequest.outputs.version }}',
+              ref:   'refs/tags/${{ inputs.version }}',
               sha:   context.sha
             })
 
       - name: Trigger Workflow
         uses: actions/github-script@v7
         id: runReleaseTag
-        if: inputs.auto_tag && steps.FindPullRequest.outputs.is_release
+        if: inputs.auto_tag
         with:
           script: |
             github.rest.actions.createWorkflowDispatch({
               owner:       context.repo.owner,
               repo:        context.repo.repo,
               workflow_id: '${{ inputs.workflow }}',
-              ref:         '${{ steps.FindPullRequest.outputs.version }}'
+              ref:         '${{ inputs.version }}'
             })

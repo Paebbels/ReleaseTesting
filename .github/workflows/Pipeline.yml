@@ -8,8 +8,6 @@ on:
 jobs:
   Prepare:
     uses: ./.github/workflows/Prepare.yml
-#    with:
-
 
   Build:
     name: Build something
@@ -58,7 +56,6 @@ jobs:
     needs:
       - Build
     if: startsWith(github.ref, 'refs/heads')
-    secrets: inherit
     permissions:
       contents: write
       actions: write
@@ -73,18 +70,21 @@ jobs:
         document: document1.txt:  Documentation
         document: build.log:      Logfile
         other:    program.py:     Application
+    secrets: inherit
 
   TriggerTaggedRelease:
     uses: ./.github/workflows/Tagging.yml
     needs:
+      - Prepare
       - Build
       - Nightly
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: write  # required for create tag
       actions:  write  # required for trigger workflow
-#    with:
-#      label: 'Release'
+    with:
+      version:  ${{ needs.Prepare.outputs.version }}
+      auto_tag: ${{ needs.Prepare.outputs.is_release_commit }}
     secrets: inherit
 
   # pre-release
