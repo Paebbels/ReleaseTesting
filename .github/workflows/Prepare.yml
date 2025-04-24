@@ -96,7 +96,7 @@ jobs:
           # The command 'git describe' (used for version) needs the history.
           fetch-depth: 0
 
-      - name: 🖉 Environmental information
+      - name: 🖉 GitHub context information
         run: |
           printf "%s\n" "github.event_name: ${{ github.event_name }}"
           printf "%s\n" "github.actor:      ${{ github.actor }}"
@@ -187,8 +187,10 @@ jobs:
               exit 1
             fi
           
-            git branch -a --contains $(git rev-parse --verify "tags/${tag}~0")
-
+            git branch --remotes --contains $(git rev-parse --verify "tags/${tag}~0") | grep "remotes/origin/${{ inputs.release_branch }}"
+            printf "retCode: $?\n"
+            git branch --remotes --contains $(git rev-parse --verify "tags/${tag}~0") | grep "remotes/origin/${{ inputs.development_branch }}"
+            printf "retCode: $?\n"
           
           else
             printf "::error title=Classify Commit::Unknown Git reference '%s'.\n" "${{ github.ref }}"
