@@ -60,18 +60,18 @@ jobs:
       contents: write
       actions: write
     with:
-      mode:          nightly
-      prerelease:    true
-      release_name:  'nightly'
-      release_title: "Nightly Release"
-      release_description: |
+      mode:       nightly
+      prerelease: true
+      tag:        'nightly'
+      title:      'Nightly Release'
+      description: |
         This *nightly* release contains all latest and important artifacts created by GHDL's CI pipeline.
         
         # %tool% %version%
         
         %%FOOTER%%
       replacements: |
-        version=0.3.3
+        version=0.5.0
         tool=myTool
       assets: |
         document: document1.txt:  Documentation
@@ -104,11 +104,10 @@ jobs:
       contents: write
       actions: write
     with:
-      release_name: ${{ needs.Prepare.outputs.version }}
-      release_description: |
-        Full release
-
-      release_description_file: '.github/RELEASE.md'
+      tag: ${{ needs.Prepare.outputs.version }}
+#      description: |
+#        Full release
+      description_file: '.github/RELEASE.md'
       replacements: |
         version=${{ needs.Prepare.outputs.version }}
         tool=myTool
