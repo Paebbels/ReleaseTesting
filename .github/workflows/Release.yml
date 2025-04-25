@@ -304,18 +304,27 @@ jobs:
                   ;;
                 "PULLREQUEST+1")
                   printf "indent by ${BASH_REMATCH[2]}\n"
-                  PR="${PR//#/##}"
+                  PR="${PR//# /## }"
+                  PR="${PR//## /### }"
+                  PR="${PR//### /#### }"
+                  PR="${PR//#### /##### }"
                   ;;
                 "PULLREQUEST+2")
                   printf "indent by ${BASH_REMATCH[2]}\n"
-                  PR="${PR//#/###}"
+                  PR="${PR//# /### }"
+                  PR="${PR//## /#### }"
+                  PR="${PR//### /##### }"
+                  PR="${PR//#### /###### }"
                   ;;
                 "PULLREQUEST+3")
                   printf "indent by ${BASH_REMATCH[2]}\n"
-                  PR="${PR//#/####}"
+                  PR="${PR//# /#### }"
+                  PR="${PR//## /##### }"
+                  PR="${PR//### /###### }"
+                  PR="${PR//#### /####### }"
                   ;;
               esac
-              NOTES="${NOTES//${BASH_REMATCH[1]}/$PR}"
+              NOTES="${NOTES//${BASH_REMATCH[0]}/$PR}"
             done
           fi
 
