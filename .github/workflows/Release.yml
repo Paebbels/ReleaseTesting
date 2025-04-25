@@ -289,41 +289,31 @@ jobs:
             NOTES="${NOTES//%%DESCRIPTION%%/$DESCRIPTION}"
           fi
           
-          # Inline PullRequest
+          # Inline PullRequest and increase headline levels
           if [[ -s __PULLREQUEST__.md ]]; then
             PULLREQUEST=$(<__PULLREQUEST__.md)
-          
-            PR_PATTERN='%%(PULLREQUEST(\+[0-3])?)%%'
-            HL_PATTERN='^#'
-            while [[ "${NOTES}" =~ $PR_PATTERN ]]; do
-              PR="${PULLREQUEST}"
-          
+            while [[ "${NOTES}" =~ %%(PULLREQUEST(\+[0-3])?)%% ]]; do
               case "${BASH_REMATCH[1]}" in
                 "PULLREQUEST+0" | "PULLREQUEST")
-                  printf "indent by ${BASH_REMATCH[2]}\n"
+                  NOTES="${NOTES//${BASH_REMATCH[0]}/$PULLREQUEST}"
+                  continue
                   ;;
                 "PULLREQUEST+1")
-                  printf "indent by ${BASH_REMATCH[2]}\n"
-                  PR="${PR//# /## }"
-                  PR="${PR//## /### }"
-                  PR="${PR//### /#### }"
-                  PR="${PR//#### /##### }"
+                  extend="#"
                   ;;
                 "PULLREQUEST+2")
-                  printf "indent by ${BASH_REMATCH[2]}\n"
-                  PR="${PR//# /### }"
-                  PR="${PR//## /#### }"
-                  PR="${PR//### /##### }"
-                  PR="${PR//#### /###### }"
+                  extend="##"
                   ;;
                 "PULLREQUEST+3")
-                  printf "indent by ${BASH_REMATCH[2]}\n"
-                  PR="${PR//# /#### }"
-                  PR="${PR//## /##### }"
-                  PR="${PR//### /###### }"
-                  PR="${PR//#### /####### }"
+                  extend="###"
                   ;;
               esac
+          
+              PR="${PULLREQUEST}"
+              PR="${PR//#### /####$extend }"
+              PR="${PR//### /###$extend }"
+              PR="${PR//## /##$extend }"
+              PR="${PR//# /#$extend }"
               NOTES="${NOTES//${BASH_REMATCH[0]}/$PR}"
             done
           fi
