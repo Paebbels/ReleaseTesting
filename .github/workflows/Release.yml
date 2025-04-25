@@ -60,7 +60,9 @@ on:
         default: |
           
           --------
-          Published from [%%workflow%%](https://github.com/%%repo%%/actions/runs/%%runid%%) workflow triggered by %%actor%% on %%datetime%%.
+          Published from [%%gh_workflow%%](%%gh_server%%/%%gh_owner_repo%%/actions/runs/%%gh_runid%%) workflow triggered by %%gh_actor%% on %%datetime%%.  
+          
+          This automatic release was created by [pyTooling/Actions](http://github.com/pyTooling/Actions)::Release.yml
         type: string
       draft:
         description: 'Specify if this is a draft.'
@@ -106,6 +108,10 @@ on:
         type: boolean
         required: false
         default: false
+    outputs:
+      release-page:
+        description: "URL to the release page."
+        value:       ${{ jobs.Release.outputs.release-page }}
 
 jobs:
   Release:
@@ -116,6 +122,8 @@ jobs:
       contents: write
       actions: write
 #      attestations: write
+    outputs:
+      release-page: ${{ steps.removeDraft.outputs.release_page }}
 
     steps:
       - name: ⏬ Checkout repository
@@ -136,11 +144,15 @@ jobs:
           ANSI_LIGHT_RED=$'\x1b[91m'
           ANSI_LIGHT_GREEN=$'\x1b[92m'
           ANSI_LIGHT_YELLOW=$'\x1b[93m'
+          ANSI_LIGHT_BLUE=$'\x1b[94m'
           ANSI_NOCOLOR=$'\x1b[0m'
 
           export GH_TOKEN=${{ github.token }}
 
-          printf "%s" "Deleting release '${{ inputs.release_name }}' ... "
+          printf "Release mode: ${ANSI_LIGHT_BLUE}%s${ANSI_NOCOLOR}\n" "${{ inputs.mode }}"
+          printf "→ Allow deletion and recreation of existing release pages for rolling releases (nightly releases)\n"
+          printf "\n"
+          printf "Deleting release '%s' ... " "${{ inputs.release_name }}"
           message="$(gh release delete ${{ inputs.release_name }} --yes 2>&1)"
           if [[ $? -eq 0 ]]; then
             printf "%s\n" "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
@@ -160,6 +172,8 @@ jobs:
 
           ANSI_LIGHT_RED=$'\x1b[91m'
           ANSI_LIGHT_GREEN=$'\x1b[92m'
+          ANSI_LIGHT_YELLOW=$'\x1b[93m'
+          ANSI_LIGHT_BLUE=$'\x1b[94m'
           ANSI_NOCOLOR=$'\x1b[0m'
 
           export GH_TOKEN=${{ github.token }}
@@ -189,9 +203,42 @@ jobs:
           EOF
           
           # Download Markdown from PullRequest
-          cat <<'EOF' > __PULLREQUEST__.md
-          Text from PR
-          EOF
+          #  Readout second parent's SHA
+          #  Search PR with that SHA
+          #  Load description of that PR
+          printf "Read second parent of current SHA (%s) ... " "${{ github.ref }}"
+          FATHER_SHA=$(git rev-parse ${{ github.ref }}^2 -- 2> /dev/null)
+          if [[ $? -ne 0 || "{FATHER_SHA}" == "" ]]; then
+            printf "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}\n"
+            printf "→ ${ANSI_LIGHT_YELLOW}Skipped readout of pull request description. This is not a merge commit.${ANSI_NOCOLOR}\n"
+          else
+            printf "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}\n"
+          
+            printf "Search Pull Request to '%s' and branch containing SHA %s ... " "${{ inputs.release_branch }}" "${FATHER_SHA}"
+            PULL_REQUESTS=$(gh pr list --base "${{ inputs.release_branch }}" --search "${FATHER_SHA}" --state "merged" --json "title,number,mergedBy,mergedAt,body")
+            if [[ $? -ne 0 || "${PULL_REQUESTS}" == "" ]]; then
+              printf "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}\n"
+              printf "${ANSI_LIGHT_RED}Couldn't find a merged Pull Request to '%s'. -> %s${ANSI_NOCOLOR}\n" "${{ inputs.release_branch }}" "${PULL_REQUESTS}"
+              printf "::error title=PullRequest::Couldn't find a merged Pull Request to '%s'. -> %s\n" "${{ inputs.release_branch }}" "${PULL_REQUESTS}"
+              exit 1
+            else
+              printf "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}\n"
+            
+              PR_TITLE="$(    printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].title")"
+              PR_NUMBER="$(   printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].number")"
+              PR_BODY="$(     printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].body")"
+              PR_MERGED_BY="$(printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].mergedBy.login")"
+              PR_MERGED_AT="$(printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].mergedAt")"
+            
+              printf "Found Pull Request:\n"
+              printf "  %s\n" "Title:    ${PR_TITLE}"
+              printf "  %s\n" "Number:   ${PR_NUMBER}"
+              printf "  %s\n" "MergedBy: ${PR_MERGED_BY}"
+              printf "  %s\n" "MergedAt: ${PR_MERGED_AT} ($(date -d"${PR_MERGED_AT}" '+%d.%m.%Y - %H:%M:%S'))"
+            fi
+          
+            echo "${PR_BODY}" > __PULLREQUEST__.md
+          fi
           
           # Check if a release description file should be used and exists.
           if [[ "${{ inputs.release_description_file }}" != "" ]]; then
@@ -207,9 +254,11 @@ jobs:
               printf "::error title=%s::%s\n" "FileNotFound" "Release description file '${{ inputs.release_description_file }}' is empty." 
               exit 1
             fi
+          # Check if the main release description is provided by a template parameter
           elif [[ -s __DESCRIPTION__.md ]]; then
             cp __DESCRIPTION__.md __NOTES__.md
             addNotes=("--notes-file" "__NOTES__.md")
+          # Check if the pull request serves as the main release description text.
           elif [[ -s __PULLREQUEST__.md ]]; then
             cp __PULLREQUEST__.md __NOTES__.md
             addNotes=("--notes-file" "__NOTES__.md")
@@ -219,7 +268,9 @@ jobs:
             exit 1
           fi
 
+          # Read release notes main file for placeholder substitution
           NOTES=$(<__NOTES__.md)
+          
           # Inline description
           if [[ -s __DESCRIPTION__.md ]]; then
             DESCRIPTION=$(<__DESCRIPTION__.md)
@@ -238,11 +289,6 @@ jobs:
             NOTES="${NOTES//%%FOOTER%%/$FOOTER}"
           fi
           
-          echo "${NOTES}" > __NOTES__.md
-          printf -- "------------------------------------------------------------\n"
-          cat __NOTES__.md
-          printf -- "------------------------------------------------------------\n"
-
           # Apply replacements
           while IFS=$'\r\n' read -r patternLine; do
             # skip empty lines
@@ -253,31 +299,60 @@ jobs:
             NOTES="${NOTES//$pattern/$replacement}"
           done <<<'${{ inputs.replacements }}'
 
-          echo "${NOTES}" > __NOTES__.md
-          printf -- "------------------------------------------------------------\n"
-          cat __NOTES__.md
-          printf -- "------------------------------------------------------------\n"
+          # Workarounds for stupid GitHub variables
+          owner_repo="${{ github.repository }}"
+          repo=${owner_repo##*/}
 
           # Replace special identifiers
-          NOTES="${NOTES//%%workflow%%/${{ github.workflow }}}"
-          NOTES="${NOTES//%%owner%%/${{ github.repository_owner }}}"
-          NOTES="${NOTES//%%repo%%/${{ github.repository }}}"
-          #NOTES="${NOTES//%%pages%%/${{ github.workflow }}}"
-          NOTES="${NOTES//%%runid%%/${{ github.run_id }}}"
-          NOTES="${NOTES//%%actor%%/${{ github.actor }}}"
+          NOTES="${NOTES//%%gh_server%%/${{ github.server_url }}}"
+          NOTES="${NOTES//%%gh_workflow_name%%/${{ github.workflow }}}"
+          NOTES="${NOTES//%%gh_owner%%/${{ github.repository_owner }}}"
+          NOTES="${NOTES//%%gh_repo%%/${repo}}"
+          NOTES="${NOTES//%%gh_owner_repo%%/${{ github.repository_owner }}}"
+          #NOTES="${NOTES//%%gh_pages%%/https://${{ github.repository_owner }}.github.io/${repo}/}"
+          NOTES="${NOTES//%%gh_runid%%/${{ github.run_id }}}"
+          NOTES="${NOTES//%%gh_actor%%/${{ github.actor }}}"
+          NOTES="${NOTES//%%gh_sha%%/${{ github.sha }}}"
           NOTES="${NOTES//%%date%%/$(date '+%Y-%m-%d')}"
           NOTES="${NOTES//%%time%%/$(date '+%H:%M:%S %Z')}"
           NOTES="${NOTES//%%datetime%%/$(date '+%Y-%m-%d %H:%M:%S %Z')}"
-                    
+          
+          # Write final release notes to file
           echo "${NOTES}" > __NOTES__.md
-          printf -- "============================================================\n"
+          
+          # Display partial contents for debugging
+          if [[ -s __DESCRIPTION__.md ]]; then
+            printf "::group::${ANSI_LIGHT_BLUE}%s${ANSI_NOCOLOR}\n" "Content of '__DESCRIPTION__.md' ...."
+            cat __DESCRIPTION__.md
+            printf "::endgroup::\n"
+          else
+            printf "${ANSI_LIGHT_YELLOW}No '__DESCRIPTION__.md' found.${ANSI_NOCOLOR}\n"
+          fi
+          if [[ -s __PULLREQUEST__.md ]]; then
+            printf "::group::${ANSI_LIGHT_BLUE}%s${ANSI_NOCOLOR}\n" "Content of '__PULLREQUEST__.md' ...."
+            cat __PULLREQUEST__.md
+            printf "::endgroup::\n"
+          else
+            printf "${ANSI_LIGHT_YELLOW}No '__PULLREQUEST__.md' found.${ANSI_NOCOLOR}\n"
+          fi
+          if [[ -s __FOOTER__.md ]]; then
+            printf "::group::${ANSI_LIGHT_BLUE}%s${ANSI_NOCOLOR}\n" "Content of '__FOOTER__.md' ...."
+            cat __FOOTER__.md
+            printf "::endgroup::\n"
+          else
+            printf "${ANSI_LIGHT_YELLOW}No '__FOOTER__.md' found.${ANSI_NOCOLOR}\n"
+          fi
+          
+          # Print final release notes
+          printf "::group::${ANSI_LIGHT_BLUE}%s${ANSI_NOCOLOR}\n" "Content of '__NOTES__.md' ...."
           cat __NOTES__.md
-          printf -- "============================================================\n"
+          printf "::endgroup::\n"
 
-          printf "Creating release '%s' ... \n" "${{ inputs.release_name }}"
+          printf "Creating release '%s' ... " "${{ inputs.release_name }}"
           message="$(gh release create "${{ inputs.release_name }}" --verify-tag $addDraft $addPreRelease $addLatest "${addTitle[@]}" "${addNotes[@]}" 2>&1)"
           if [[ $? -eq 0 ]]; then
             printf "%s\n" "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+            printf "  Release page: %s\n" "${message}"
           else
             printf "%s\n" "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}"
             printf "  ${ANSI_LIGHT_RED}Couldn't create release '%s' -> Error: '%s'.${ANSI_NOCOLOR}\n" "${{ inputs.release_name }}" "${message}"
@@ -599,6 +674,7 @@ jobs:
           fi
 
       - name: 📑 Remove draft state from Release Page
+        id: removeDraft
         if: ${{ ! inputs.draft }}
         run: |
           set +e
@@ -611,9 +687,12 @@ jobs:
 
           # Remove draft-state from release page
           printf "%s" "Remove draft-state from release '${title}' ... "
-          gh release edit --draft=false "${{ inputs.release_name }}"
+          releasePage=$(gh release edit --draft=false "${{ inputs.release_name }}")
           if [[ $? -eq 0 ]]; then
             printf "%s\n" "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}"
+            printf "  Release page: %s\n" "${releasePage}"
+          
+            printf "release_page=%s\n" "${releasePage}" >> "${GITHUB_OUTPUT}"
           else
             printf "%s\n" "${ANSI_LIGHT_RED}[ERROR]${ANSI_NOCOLOR}"
             printf "  %s\n" "${ANSI_LIGHT_RED}Couldn't remove draft-state from release '${{ inputs.release_name }}'.${ANSI_NOCOLOR}"
