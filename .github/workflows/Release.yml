@@ -291,30 +291,27 @@ jobs:
           
           # Inline PullRequest and increase headline levels
           if [[ -s __PULLREQUEST__.md ]]; then
-            PULLREQUEST=$(<__PULLREQUEST__.md)
             while [[ "${NOTES}" =~ %%(PULLREQUEST(\+[0-3])?)%% ]]; do
               case "${BASH_REMATCH[1]}" in
                 "PULLREQUEST+0" | "PULLREQUEST")
-                  NOTES="${NOTES//${BASH_REMATCH[0]}/$PULLREQUEST}"
+                  NOTES="${NOTES//${BASH_REMATCH[0]}/$(<__PULLREQUEST__.md)}"
                   continue
                   ;;
                 "PULLREQUEST+1")
-                  extend="#"
+                  NOTES="${NOTES//${BASH_REMATCH[0]}/$(cat __PULLREQUEST__.md | sed -E 's/^(#+) /$1# /gm;t')}"
+                   - > __PR__.md
                   ;;
                 "PULLREQUEST+2")
-                  extend="##"
+                  cat __PULLREQUEST__.md | sed -E 's/^(#+) /$1## /gm;t' - > __PR__.md
+                  PR=$(<__PULLREQUEST__.md)
+                  NOTES="${NOTES//${BASH_REMATCH[0]}/$PR}"
                   ;;
                 "PULLREQUEST+3")
-                  extend="###"
+                  cat __PULLREQUEST__.md | sed -E 's/^(#+) /$1### /gm;t' - > __PR__.md
+                  PR=$(<__PULLREQUEST__.md)
+                  NOTES="${NOTES//${BASH_REMATCH[0]}/$PR}"
                   ;;
               esac
-          
-              PR="${PULLREQUEST}"
-              PR="${PR//#### /####$extend }"
-              PR="${PR//### /###$extend }"
-              PR="${PR//## /##$extend }"
-              PR="${PR//# /#$extend }"
-              NOTES="${NOTES//${BASH_REMATCH[0]}/$PR}"
             done
           fi
 
