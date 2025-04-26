@@ -285,8 +285,7 @@ jobs:
           
           # Inline description
           if [[ -s __DESCRIPTION__.md ]]; then
-            DESCRIPTION=$(<__DESCRIPTION__.md)
-            NOTES="${NOTES//%%DESCRIPTION%%/$DESCRIPTION}"
+            NOTES="${NOTES//%%DESCRIPTION%%/$(<__DESCRIPTION__.md)}"
           fi
           
           # Inline PullRequest and increase headline levels
@@ -295,20 +294,15 @@ jobs:
               case "${BASH_REMATCH[1]}" in
                 "PULLREQUEST+0" | "PULLREQUEST")
                   NOTES="${NOTES//${BASH_REMATCH[0]}/$(<__PULLREQUEST__.md)}"
-                  continue
                   ;;
                 "PULLREQUEST+1")
                   NOTES="${NOTES//${BASH_REMATCH[0]}/$(cat __PULLREQUEST__.md | sed -E 's/^(#+) /\1# /gm;t')}"
                   ;;
                 "PULLREQUEST+2")
-                  cat __PULLREQUEST__.md | sed -E 's/^(#+) /$1## /gm;t' - > __PR__.md
-                  PR=$(<__PR__.md)
-                  NOTES="${NOTES//${BASH_REMATCH[0]}/$PR}"
+                  NOTES="${NOTES//${BASH_REMATCH[0]}/$(cat __PULLREQUEST__.md | sed -E 's/^(#+) /\1### /gm;t')}"
                   ;;
                 "PULLREQUEST+3")
-                  cat __PULLREQUEST__.md | sed -E 's/^(#+) /$1### /gm;t' - > __PR__.md
-                  PR=$(<__PR__.md)
-                  NOTES="${NOTES//${BASH_REMATCH[0]}/$PR}"
+                  NOTES="${NOTES//${BASH_REMATCH[0]}/$(cat __PULLREQUEST__.md | sed -E 's/^(#+) /\1### /gm;t')}"
                   ;;
               esac
             done
@@ -316,8 +310,7 @@ jobs:
 
           # inline Footer
           if [[ -s __FOOTER__.md ]]; then
-            FOOTER=$(<__FOOTER__.md)
-            NOTES="${NOTES//%%FOOTER%%/$FOOTER}"
+            NOTES="${NOTES//%%FOOTER%%/$(<__FOOTER__.md)}"
           fi
           
           # Apply replacements
