@@ -298,17 +298,16 @@ jobs:
                   continue
                   ;;
                 "PULLREQUEST+1")
-                  NOTES="${NOTES//${BASH_REMATCH[0]}/$(cat __PULLREQUEST__.md | sed -E 's/^(#+) /$1# /gm;t')}"
-                   - > __PR__.md
+                  NOTES="${NOTES//${BASH_REMATCH[0]}/$(cat __PULLREQUEST__.md | sed -E 's/^(#+) /\1# /gm;t')}"
                   ;;
                 "PULLREQUEST+2")
                   cat __PULLREQUEST__.md | sed -E 's/^(#+) /$1## /gm;t' - > __PR__.md
-                  PR=$(<__PULLREQUEST__.md)
+                  PR=$(<__PR__.md)
                   NOTES="${NOTES//${BASH_REMATCH[0]}/$PR}"
                   ;;
                 "PULLREQUEST+3")
                   cat __PULLREQUEST__.md | sed -E 's/^(#+) /$1### /gm;t' - > __PR__.md
-                  PR=$(<__PULLREQUEST__.md)
+                  PR=$(<__PR__.md)
                   NOTES="${NOTES//${BASH_REMATCH[0]}/$PR}"
                   ;;
               esac
