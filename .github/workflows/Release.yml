@@ -206,12 +206,12 @@ jobs:
           export GH_TOKEN=${{ github.token }}
 
           # Save release description (from parameter in a file)
-          cat <<'EOF' > __DESCRIPTION__.md
+          head -c -1 <<'EOF' > __DESCRIPTION__.md
           ${{ inputs.description }}
           EOF
 
           # Save release footer (from parameter in a file)
-          cat <<'EOF' > __FOOTER__.md
+          head -c -1 <<'EOF' > __FOOTER__.md
           ${{ inputs.description_footer }}
           EOF
 
