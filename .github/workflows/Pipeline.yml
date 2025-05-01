@@ -56,7 +56,6 @@ jobs:
     needs:
       - Prepare
       - Build
-    if: needs.Prepare.outputs.on_dev_branch == 'true'
     permissions:
       contents: write
       actions:  write
