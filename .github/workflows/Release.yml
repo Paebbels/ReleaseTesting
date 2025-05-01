@@ -52,7 +52,7 @@ on:
       description:
         description: 'Multi-line description of the release.'
         required: false
-        default: 'Release of artifacts from latest CI pipeline.'
+        default: ''
         type: string
       description_file:
         description: 'Description of the release from a Markdown file.'
@@ -63,10 +63,10 @@ on:
         description: 'Footer line(s) in every release.'
         required: false
         default: |
-          
+
           --------
-          Published from [%%gh_workflow%%](%%gh_server%%/%%gh_owner_repo%%/actions/runs/%%gh_runid%%) workflow triggered by %%gh_actor%% on %%datetime%%.  
-          
+          Published from [%%gh_workflow%%](%%gh_server%%/%%gh_owner_repo%%/actions/runs/%%gh_runid%%) workflow triggered by %%gh_actor%% on %%datetime%%.
+
           This automatic release was created by [pyTooling/Actions](http://github.com/pyTooling/Actions)::Release.yml
         type: string
       draft:
@@ -91,8 +91,9 @@ on:
         type: string
       assets:
         description: 'Multi-line string containing artifact:file:title asset descriptions.'
-        required: true
+        required: false
         type: string
+        default: ''
       inventory-json:
         type: string
         required: false
@@ -125,7 +126,7 @@ jobs:
     continue-on-error: ${{ inputs.can-fail }}
     permissions:
       contents: write
-      actions: write
+      actions:  write
 #      attestations: write
     outputs:
       release-page: ${{ steps.removeDraft.outputs.release_page }}
@@ -208,12 +209,12 @@ jobs:
           cat <<'EOF' > __DESCRIPTION__.md
           ${{ inputs.description }}
           EOF
-          
+
           # Save release footer (from parameter in a file)
           cat <<'EOF' > __FOOTER__.md
           ${{ inputs.description_footer }}
           EOF
-          
+
           # Download Markdown from PullRequest
           #  Readout second parent's SHA
           #  Search PR with that SHA
@@ -225,7 +226,7 @@ jobs:
             printf "→ ${ANSI_LIGHT_YELLOW}Skipped readout of pull request description. This is not a merge commit.${ANSI_NOCOLOR}\n"
           else
             printf "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}\n"
-          
+
             printf "Search Pull Request to '%s' and branch containing SHA %s ... " "${{ inputs.release_branch }}" "${FATHER_SHA}"
             PULL_REQUESTS=$(gh pr list --base "${{ inputs.release_branch }}" --search "${FATHER_SHA}" --state "merged" --json "title,number,mergedBy,mergedAt,body")
             if [[ $? -ne 0 || "${PULL_REQUESTS}" == "" ]]; then
@@ -235,35 +236,35 @@ jobs:
               exit 1
             else
               printf "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}\n"
-            
+
               PR_TITLE="$(    printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].title")"
               PR_NUMBER="$(   printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].number")"
               PR_BODY="$(     printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].body")"
               PR_MERGED_BY="$(printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].mergedBy.login")"
               PR_MERGED_AT="$(printf "%s\n" "${PULL_REQUESTS}" | jq --raw-output ".[0].mergedAt")"
-            
+
               printf "Found Pull Request:\n"
               printf "  %s\n" "Title:    ${PR_TITLE}"
               printf "  %s\n" "Number:   ${PR_NUMBER}"
               printf "  %s\n" "MergedBy: ${PR_MERGED_BY}"
               printf "  %s\n" "MergedAt: ${PR_MERGED_AT} ($(date -d"${PR_MERGED_AT}" '+%d.%m.%Y - %H:%M:%S'))"
             fi
-          
+
             echo "${PR_BODY}" > __PULLREQUEST__.md
           fi
-          
+
           # Check if a release description file should be used and exists.
           if [[ "${{ inputs.description_file }}" != "" ]]; then
             if [[ ! -f "${{ inputs.description_file }}" ]]; then
               printf "${ANSI_LIGHT_RED}Release description file '%s' not found.${ANSI_NOCOLOR}\n" "${{ inputs.description_file }}"
-              printf "::error title=%s::%s\n" "FileNotFound" "Release description file '${{ inputs.description_file }}' not found." 
+              printf "::error title=%s::%s\n" "FileNotFound" "Release description file '${{ inputs.description_file }}' not found."
               exit 1
             elif [[ -s "${{ inputs.description_file }}" ]]; then
               printf "Use '%s' as main release description.\n" "${{ inputs.description_file }}"
               cp -v "${{ inputs.description_file }}" __NOTES__.md
             else
               printf "${ANSI_LIGHT_RED}Release description file '%s' is empty.${ANSI_NOCOLOR}\n" "${{ inputs.description_file }}"
-              printf "::error title=%s::%s\n" "FileNotFound" "Release description file '${{ inputs.description_file }}' is empty." 
+              printf "::error title=%s::%s\n" "FileNotFound" "Release description file '${{ inputs.description_file }}' is empty."
               exit 1
             fi
           # Check if the main release description is provided by a template parameter
@@ -274,20 +275,23 @@ jobs:
           elif [[ -s __PULLREQUEST__.md ]]; then
             printf "Use '__PULLREQUEST__.md' as main release description.\n"
             mv -v __PULLREQUEST__.md __NOTES__.md
-          else       
+
+            printf "Append '%%FOOTER%%' to '__NOTES__.md'.\n"
+            printf "\n%%FOOTER%%\n" >> __NOTES__.md
+          else
             printf "${ANSI_LIGHT_RED}No release description specified (file, parameter, PR text).${ANSI_NOCOLOR}\n"
-            printf "::error title=%s::%s\n" "MissingDescription" "No release description specified (file, parameter, PR text)."   
+            printf "::error title=%s::%s\n" "MissingDescription" "No release description specified (file, parameter, PR text)."
             exit 1
           fi
 
           # Read release notes main file for placeholder substitution
           NOTES=$(<__NOTES__.md)
-          
+
           # Inline description
           if [[ -s __DESCRIPTION__.md ]]; then
             NOTES="${NOTES//%%DESCRIPTION%%/$(<__DESCRIPTION__.md)}"
           fi
-          
+
           # Inline PullRequest and increase headline levels
           if [[ -s __PULLREQUEST__.md ]]; then
             while [[ "${NOTES}" =~ %%(PULLREQUEST(\+[0-3])?)%% ]]; do
@@ -312,7 +316,7 @@ jobs:
           if [[ -s __FOOTER__.md ]]; then
             NOTES="${NOTES//%%FOOTER%%/$(<__FOOTER__.md)}"
           fi
-          
+
           # Apply replacements
           while IFS=$'\r\n' read -r patternLine; do
             # skip empty lines
@@ -340,35 +344,35 @@ jobs:
           NOTES="${NOTES//%%date%%/$(date '+%Y-%m-%d')}"
           NOTES="${NOTES//%%time%%/$(date '+%H:%M:%S %Z')}"
           NOTES="${NOTES//%%datetime%%/$(date '+%Y-%m-%d %H:%M:%S %Z')}"
-          
+
           # Write final release notes to file
           echo "${NOTES}" > __NOTES__.md
-          
+
           # Display partial contents for debugging
           if [[ -s __DESCRIPTION__.md ]]; then
-            printf "::group::${ANSI_LIGHT_BLUE}%s${ANSI_NOCOLOR}\n" "Content of '__DESCRIPTION__.md' ...."
+            printf "::group::${ANSI_LIGHT_BLUE}%s${ANSI_NOCOLOR}\n" "Content of '__DESCRIPTION__.md' ($(stat --printf="%s" "__DESCRIPTION__.md" | numfmt --to=iec-i --format '%.2f')B) ...."
             cat __DESCRIPTION__.md
             printf "::endgroup::\n"
           else
             printf "${ANSI_LIGHT_YELLOW}No '__DESCRIPTION__.md' found.${ANSI_NOCOLOR}\n"
           fi
           if [[ -s __PULLREQUEST__.md ]]; then
-            printf "::group::${ANSI_LIGHT_BLUE}%s${ANSI_NOCOLOR}\n" "Content of '__PULLREQUEST__.md' ...."
+            printf "::group::${ANSI_LIGHT_BLUE}%s${ANSI_NOCOLOR}\n" "Content of '__PULLREQUEST__.md' ($(stat --printf="%s" "__PULLREQUEST__.md" | numfmt --to=iec-i --format '%.2f')B) ...."
             cat __PULLREQUEST__.md
             printf "::endgroup::\n"
           else
             printf "${ANSI_LIGHT_YELLOW}No '__PULLREQUEST__.md' found.${ANSI_NOCOLOR}\n"
           fi
           if [[ -s __FOOTER__.md ]]; then
-            printf "::group::${ANSI_LIGHT_BLUE}%s${ANSI_NOCOLOR}\n" "Content of '__FOOTER__.md' ...."
+            printf "::group::${ANSI_LIGHT_BLUE}%s${ANSI_NOCOLOR}\n" "Content of '__FOOTER__.md' ($(stat --printf="%s" "__FOOTER__.md" | numfmt --to=iec-i --format '%.2f')B) ...."
             cat __FOOTER__.md
             printf "::endgroup::\n"
           else
             printf "${ANSI_LIGHT_YELLOW}No '__FOOTER__.md' found.${ANSI_NOCOLOR}\n"
           fi
-          
+
           # Print final release notes
-          printf "::group::${ANSI_LIGHT_BLUE}%s${ANSI_NOCOLOR}\n" "Content of '__NOTES__.md' ...."
+          printf "::group::${ANSI_LIGHT_BLUE}%s${ANSI_NOCOLOR}\n" "Content of '__NOTES__.md' ($(stat --printf="%s" "__NOTES__.md" | numfmt --to=iec-i --format '%.2f')B) ...."
           cat __NOTES__.md
           printf "::endgroup::\n"
 
@@ -385,7 +389,7 @@ jobs:
           ANSI_NOCOLOR=$'\x1b[0m'
 
           export GH_TOKEN=${{ github.token }}
-          
+
           if [[ "${{ inputs.prerelease }}" == "true" ]]; then
             addPreRelease="--prerelease"
           fi
@@ -427,7 +431,7 @@ jobs:
           ANSI_NOCOLOR=$'\x1b[0m'
 
           export GH_TOKEN=${{ github.token }}
-          
+
           addDraft="--draft"
           if [[ "${{ inputs.prerelease }}" == "true" ]]; then
             addPreRelease="--prerelease"
@@ -788,7 +792,7 @@ jobs:
           if [[ $? -eq 0 ]]; then
             printf "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}\n"
             printf "  Release page: %s\n" "${releasePage}"
-          
+
             printf "release_page=%s\n" "${releasePage}" >> "${GITHUB_OUTPUT}"
           else
             printf "${ANSI_LIGHT_RED}[ERROR]${ANSI_NOCOLOR}\n"

@@ -58,7 +58,7 @@ jobs:
     if: startsWith(github.ref, 'refs/heads')
     permissions:
       contents: write
-      actions: write
+      actions:  write
     with:
       mode:       nightly
       prerelease: true
