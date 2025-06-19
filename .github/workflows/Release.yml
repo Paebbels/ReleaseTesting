@@ -65,7 +65,7 @@ on:
         default: |
 
           --------
-          Published from [%%gh_workflow%%](%%gh_server%%/%%gh_owner_repo%%/actions/runs/%%gh_runid%%) workflow triggered by %%gh_actor%% on %%datetime%%.
+          Published from [%%gh_workflow_name%%](%%gh_server%%/%%gh_owner_repo%%/actions/runs/%%gh_runid%%) workflow triggered by %%gh_actor%% on %%datetime%%.
 
           This automatic release was created by [pyTooling/Actions](http://github.com/pyTooling/Actions)::Release.yml
         type: string
@@ -525,6 +525,8 @@ jobs:
           declare -A downloadedArtifacts
           # A dictionary to check for duplicate asset files in release
           declare -A assetFilenames
+          # A dictionary of SHA256 checksums
+          declare -A sha256Checksums
           while IFS=$'\r\n' read -r assetLine; do
             if [[ "${assetLine}" == "" || "${assetLine:0:1}" == "#" ]]; then
               continue
@@ -704,12 +706,16 @@ jobs:
             # Add asset to JSON inventory
             if [[ "${{ inputs.inventory-json }}" != "" ]]; then
               if [[ "${categories}" != "${title}" ]]; then
+                printf "  compute SHA256 checksum ...\n"
+                sha256=$(sha256sum -b ${uploadFile} | cut -d " " -f1)
+                sha256Checksums[$asset]=$sha256
+
                 printf "  adding file '%s' with '%s' to JSON inventory ...\n" "${uploadFile#*/}" "${categories//;/ → }"
                 category=""
                 jsonEntry=$(jq -c -n \
                   --arg title "${title}" \
                   --arg file "${uploadFile#*/}" \
-                  '{"file": $file, "title": $title}' \
+                  '{"file": $file, "sha256": $sha256, "title": $title}' \
                 )
 
                 while [[ "${categories}" != "${category}" ]]; do
@@ -733,6 +739,18 @@ jobs:
             gh release upload ${{ inputs.tag }} "${uploadFile}#${title}" --clobber
             if [[ $? -eq 0 ]]; then
               printf "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}\n"
+
+              printf "  checking assets SHA256 checksum ... "
+              ghSHA256=$(gh release view -R ghdl/ghdl --json assets --jq ".assets[] | select(.name == \"${uploadFile}\") | .digest" ${{ inputs.tag }})
+              if [[ "${ghSHA256}" == "${sha256Checksums[$asset]}" ]]; then
+                printf "${ANSI_LIGHT_GREEN}[PASSED]${ANSI_NOCOLOR}\n"
+              else
+                printf "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}\n"
+                printf "    ${ANSI_LIGHT_RED}SHA256 checksum compare failed. Local=%s GitHub=%s${ANSI_NOCOLOR}\n" "${sha256Checksums[$asset]}" "${ghSHA256}"
+                printf "::error title=%s::%s\n" "ChecksumError" "SHA256 checksum compare failed. Local=${sha256Checksums[$asset]} GitHub=${ghSHA256}"
+                ERRORS=$((ERRORS + 1))
+                continue
+              fi
             else
               printf "${ANSI_LIGHT_RED}[ERROR]${ANSI_NOCOLOR}\n"
               printf "    ${ANSI_LIGHT_RED}Couldn't upload asset '%s' from '%s' to release '%s'.${ANSI_NOCOLOR}\n" "${asset}" "${uploadFile}" "${{ inputs.tag }}"
