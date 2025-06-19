@@ -703,7 +703,7 @@ jobs:
               continue
             fi
 
-            printf "  compute SHA256 checksum ... "
+            printf "  compute SHA256 checksum of '${uploadFile}' ... "
             sha256=$(sha256sum -b ${uploadFile} | cut -d " " -f1)
             sha256Checksums[$asset]=$sha256
             printf "${ANSI_LIGHT_BLUE}${sha256}]${ANSI_NOCOLOR}\n"
@@ -715,6 +715,7 @@ jobs:
                 category=""
                 jsonEntry=$(jq -c -n \
                   --arg title "${title}" \
+                  --arg sha256 "${sha256}" \
                   --arg file "${uploadFile#*/}" \
                   '{"file": $file, "sha256": $sha256, "title": $title}' \
                 )
@@ -742,7 +743,7 @@ jobs:
               printf "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}\n"
 
               printf "  checking assets SHA256 checksum ... "
-              ghSHA256=$(gh release view -R ghdl/ghdl --json assets --jq ".assets[] | select(.name == \"${uploadFile}\") | .digest" ${{ inputs.tag }})
+              ghSHA256=$(gh release view --json assets --jq ".assets[] | select(.name == \"${uploadFile}\") | .digest" ${{ inputs.tag }})
               if [[ "${ghSHA256}" == "${sha256Checksums[$asset]}" ]]; then
                 printf "${ANSI_LIGHT_GREEN}[PASSED]${ANSI_NOCOLOR}\n"
               else
