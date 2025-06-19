@@ -742,13 +742,15 @@ jobs:
             if [[ $? -eq 0 ]]; then
               printf "${ANSI_LIGHT_GREEN}[OK]${ANSI_NOCOLOR}\n"
 
-              printf "  checking assets SHA256 checksum ... "
-              ghSHA256=$(gh release view --json assets --jq ".assets[] | select(.name == \"${uploadFile}\") | .digest" ${{ inputs.tag }})
+              printf "  checking assets SHA256 checksum ... \n"
+              ghSHA256=$(gh release view --json assets --jq ".assets[] | select(.name == \"${asset}\") | .digest" ${{ inputs.tag }})
               if [[ "${ghSHA256}" == "${sha256Checksums[$asset]}" ]]; then
                 printf "${ANSI_LIGHT_GREEN}[PASSED]${ANSI_NOCOLOR}\n"
               else
                 printf "${ANSI_LIGHT_RED}[FAILED]${ANSI_NOCOLOR}\n"
-                printf "    ${ANSI_LIGHT_RED}SHA256 checksum compare failed. Local=%s GitHub=%s${ANSI_NOCOLOR}\n" "${sha256Checksums[$asset]}" "${ghSHA256}"
+                printf "    ${ANSI_LIGHT_RED}SHA256 checksum compare failed.${ANSI_NOCOLOR}\n"
+                printf "      ${ANSI_LIGHT_RED}Local:  %s${ANSI_NOCOLOR}\n" "${sha256Checksums[$asset]}"
+                printf "      ${ANSI_LIGHT_RED}GitHub: %s${ANSI_NOCOLOR}\n" "${ghSHA256}"
                 printf "::error title=%s::%s\n" "ChecksumError" "SHA256 checksum compare failed. Local=${sha256Checksums[$asset]} GitHub=${ghSHA256}"
                 ERRORS=$((ERRORS + 1))
                 continue
