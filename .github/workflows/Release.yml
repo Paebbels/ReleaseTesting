@@ -703,13 +703,14 @@ jobs:
               continue
             fi
 
+            printf "  compute SHA256 checksum ... "
+            sha256=$(sha256sum -b ${uploadFile} | cut -d " " -f1)
+            sha256Checksums[$asset]=$sha256
+            printf "${ANSI_LIGHT_BLUE}${sha256}]${ANSI_NOCOLOR}\n"
+          
             # Add asset to JSON inventory
             if [[ "${{ inputs.inventory-json }}" != "" ]]; then
               if [[ "${categories}" != "${title}" ]]; then
-                printf "  compute SHA256 checksum ...\n"
-                sha256=$(sha256sum -b ${uploadFile} | cut -d " " -f1)
-                sha256Checksums[$asset]=$sha256
-
                 printf "  adding file '%s' with '%s' to JSON inventory ...\n" "${uploadFile#*/}" "${categories//;/ → }"
                 category=""
                 jsonEntry=$(jq -c -n \
