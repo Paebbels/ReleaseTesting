@@ -2,7 +2,6 @@ name: Pipeline
 
 on:
   push:
-  create:
   workflow_dispatch:
 
 jobs:
@@ -70,13 +69,16 @@ jobs:
         # %tool% %version%
         
         %%FOOTER%%
+      inventory-json:       "inventory.json"
+      inventory-version:    "0.7.0"
+      inventory-categories: "kind"
       replacements: |
         version=0.5.0
         tool=myTool
       assets: |
-        document: document1.txt:  Documentation
-        document: build.log:      Logfile
-        other:    program.py:     Application
+        document: document1.txt:  documentation: Documentation
+        document: build.log:      logfile:       Logfile
+        other:    program.py:     application:   Application
     secrets: inherit
 
   TriggerTaggedRelease:
@@ -109,10 +111,13 @@ jobs:
 #      description: |
 #        Full release
 #      description_file: '.github/RELEASE.md'
+      inventory-json:       "inventory.json"
+      inventory-version:    "0.7.0"
+      inventory-categories: "kind"
       replacements: |
         version=${{ needs.Prepare.outputs.version }}
         tool=myTool
       assets: |
-        document: document1.txt:  Documentation
-        document: build.log:      Logfile
-        other:    program.py:     Application
+        document: document1.txt:  documentation: Documentation
+        document: build.log:      logfile:       Logfile
+        other:    program.py:     application:   Application
