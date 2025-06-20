@@ -71,6 +71,7 @@ jobs:
         %%FOOTER%%
       inventory-json:       "inventory.json"
       inventory-version:    "0.7.0"
+      inventory-latest-version: "0.6.1"
       inventory-categories: "kind"
       replacements: |
         version=0.5.0

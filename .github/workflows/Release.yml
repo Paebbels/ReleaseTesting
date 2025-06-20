@@ -102,6 +102,10 @@ on:
         type: string
         required: false
         default: ''
+      inventory-latest-version:
+        type: string
+        required: false
+        default: ''
       inventory-categories:
         type: string
         required: false
@@ -290,6 +294,8 @@ jobs:
           # Inline description
           if [[ -s __DESCRIPTION__.md ]]; then
             NOTES="${NOTES//%%DESCRIPTION%%/$(<__DESCRIPTION__.md)}"
+          else
+            NOTES="${NOTES//%%DESCRIPTION%%/}"
           fi
 
           # Inline PullRequest and increase headline levels
@@ -310,11 +316,17 @@ jobs:
                   ;;
               esac
             done
+          else
+            while [[ "${NOTES}" =~ %%(PULLREQUEST(\+[0-3])?)%% ]]; do
+              NOTES="${NOTES//${BASH_REMATCH[0]}/}"
+            done
           fi
 
           # inline Footer
           if [[ -s __FOOTER__.md ]]; then
             NOTES="${NOTES//%%FOOTER%%/$(<__FOOTER__.md)}"
+          else
+            NOTES="${NOTES//%%FOOTER%%/}"
           fi
 
           # Apply replacements
@@ -518,6 +530,19 @@ jobs:
               )" \
               '{"version": 1.0, "timestamp": $date, "meta": $jsonMeta, "files": {}}'
             )
+
+            if [[ "${{ inputs.inventory-latest-version }}" != "" ]]; then
+              jsonLatest=$(jq -c -n \
+                --arg version "${{ inputs.inventory-latest-version }}" \
+                '{"version": $version}' \
+              )
+
+              jsonInventory=$(jq -c -n \
+                --argjson inventory "${jsonInventory}" \
+                --argjson latest "${jsonLatest}" \
+                '$inventory * {"latest": $latest}' \
+              )
+            fi
           fi
 
           ERRORS=0
@@ -707,7 +732,7 @@ jobs:
             sha256=$(sha256sum -b ${uploadFile} | cut -d " " -f1)
             sha256Checksums[$asset]="sha256:${sha256}"
             printf "${ANSI_LIGHT_BLUE}${sha256}${ANSI_NOCOLOR}\n"
-          
+
             # Add asset to JSON inventory
             if [[ "${{ inputs.inventory-json }}" != "" ]]; then
               if [[ "${categories}" != "${title}" ]]; then
